@@ -174,7 +174,7 @@ class GameMap {
              let sx = floor(random(this.width));
              let sy = floor(random(this.height));
              // 確保出生點可通行，且距離入口有一定距離
-             if (this.grid[sy] && this.grid[sy][sx] === 0 && distSq(sx * TILE_SIZE, sy * TILE_SIZE, this.entryPoint.x, this.entryPoint.y) > (TILE_SIZE * 10)**2) {
+             if (this.grid[sy] && this.grid[sy][sx] === 0 && dist(sx * TILE_SIZE, sy * TILE_SIZE, this.entryPoint.x, this.entryPoint.y) > (TILE_SIZE * 10)) {
                  this.spawnPoints.push(createVector((sx + 0.5) * TILE_SIZE, (sy + 0.5) * TILE_SIZE));
              }
              spawnAttempts--;
@@ -210,8 +210,8 @@ class GameMap {
      isOnExit(pixelX, pixelY) {
          if (!this.exitPoint) return false;
          // 使用一個小範圍來檢測，而不是精確點
-         const exitRadiusSq = (TILE_SIZE * 1.0)**2;
-         return distSq(pixelX, pixelY, this.exitPoint.x, this.exitPoint.y) < exitRadiusSq;
+         const exitRadiusSq = (TILE_SIZE * 1.0);
+         return dist(pixelX, pixelY, this.exitPoint.x, this.exitPoint.y) < exitRadiusSq;
      }
 
      // 檢查是否踩到了返回村莊的入口 (野外地圖用)
