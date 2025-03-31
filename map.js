@@ -90,7 +90,7 @@ class GameMap {
              let houseX = floor(random(wall + 1, this.width - wall - 2));
              let houseY = floor(random(wall + 1, this.height - wall - 2));
              // 確保不堵住出口路徑 (簡單檢查)
-             if (distSq(houseX * TILE_SIZE, houseY*TILE_SIZE, this.entryPoint.x, this.entryPoint.y) > (TILE_SIZE * 3)**2) {
+			if (dist(houseX * TILE_SIZE, houseY * TILE_SIZE, this.entryPoint.x, this.entryPoint.y) > TILE_SIZE * 3) {
                   this.grid[houseY][houseX] = 1; // 簡單用牆壁表示房子
                   if (this.grid[houseY+1]) this.grid[houseY+1][houseX] = 1; // 房子佔 1x2 格
              }
