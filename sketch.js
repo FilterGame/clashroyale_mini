@@ -49,7 +49,7 @@ const ItemData = {
 // --- 怪物資料 ---
 const MonsterData = {
     'goblin': {
-        name: "哥布林", hp: 30, mp: 0, attack: 5, defense: 1, xp: 10, speed: 2,
+        name: "哥布林", hp: 25, mp: 0, attack: 5, defense: 1, xp: 10, speed: 2,
         attackType: 'melee', // 近戰
         attackRange: TILE_SIZE * 1.2, // 近戰攻擊距離稍短
         aggroRange: TILE_SIZE * 5,
@@ -63,7 +63,7 @@ const MonsterData = {
         ]
     },
     'skeleton': {
-        name: "骷髏弓箭手", hp: 45, mp: 0, attack: 6, defense: 3, xp: 18, speed: 1.5, // 攻擊力降低一點，因為是遠程
+        name: "骷髏弓箭手", hp: 43, mp: 0, attack: 2, defense: 3, xp: 18, speed: 2.5, // 攻擊力降低一點，因為是遠程
         attackType: 'ranged', // 遠程
         attackRange: TILE_SIZE * 6, // 遠程攻擊距離
         projectileType: 'arrow', // 投射物類型
@@ -126,7 +126,7 @@ const NpcData = {
 
 // --- 玩家初始設定 ---
 const PlayerDefaults = {
-    hp: 100,
+    hp: 110,
     mp: 50,
     attack: 5,
     defense: 1,
@@ -151,7 +151,7 @@ const MapSettings = {
     noiseScale: 0.08, // 調整噪聲參數
     obstacleDensity: 0.1,
     maxMonsters: 40, // 稍微降低最大怪物數，提高性能
-    monsterSpawnInterval: 4000, // 怪物生成間隔 (ms)
+    monsterSpawnInterval: 3500, // 怪物生成間隔 (ms)
     monsterSpawnCheckRadius: TILE_SIZE * 15, // 玩家周圍多大範圍內不生怪
 };
 
@@ -790,7 +790,7 @@ class GameMap {
 
         this.entryPoint = createVec((entryX + 0.5) * TILE_SIZE, (entryY + 0.5) * TILE_SIZE);
         this.exitPoint = this.entryPoint; // 出口即入口
-        if(this.grid[entryY]) this.grid[entryY][entryX] = 4; // 特殊標記：返回村莊的入口
+        if(this.grid[entryY]) this.grid[entryY][entryX-1] = 4; // 特殊標記：返回村莊的入口
          // 稍微清理入口周圍的障礙物 (safer access)
          for(let dy = -1; dy <= 1; dy++){
               for(let dx = -1; dx <= 1; dx++){
