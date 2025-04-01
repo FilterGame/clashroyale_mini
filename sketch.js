@@ -1,561 +1,738 @@
-// sketch.js
+/*
+  戰場生存遊戲 - 最終改良版（包含瞄準框與虛線輔助）
+  
+  說明：
+  1. 遊戲開始前會出現說明畫面，說明遊戲規則與操作方式，按任意鍵後開始遊戲。
+  2. 玩家（藍色圓形）使用方向鍵/WASD移動，
+     射擊方式：按空白鍵或滑鼠左鍵射擊（按住左鍵可持續射擊，依據武器冷卻）。
+  3. 子彈會留下尾巴軌跡，射擊方向以滑鼠位置決定。
+  4. 預警分為兩種：
+     - 敵人預警（70% 機率）：畫面左右出現鮮紅色區塊（上下僅限文字區域）；預警結束後從畫面邊緣產生敵人，
+       而且每次敵人預警後，下次產生的敵人數量會比上一次多一個。
+     - 攻擊預警（30% 機率）：畫面左右出現較淡紅色區塊；預警結束後會有數顆子彈從畫面外射向玩家。
+  5. 夥伴救援：每 3 回合（預警週期）結束時會有機率出現一位被綁住的夥伴，
+     該夥伴固定出現在畫面中心，玩家碰觸後即可解綁；解綁後夥伴會圍繞玩家跟隨並自動射擊，
+     每 0.5 秒會隨機更換跟隨的目標位置（以固定半徑環繞玩家）。
+  6. 武器選擇、補給、強化敵人等功能與之前相同（詳見下述說明）。
+  7. 畫面左上角顯示存活時間與擊殺數；左下角顯示目前武器與彈藥數量。
+  8. 當使用機槍或散彈槍彈藥不足時，按射擊鍵玩家上方會跳出「彈藥不足!」提示（持續約 1 秒）。
+  9. 新增瞄準輔助：在滑鼠位置會出現一個白色瞄準框，並有一條虛線連接玩家與該瞄準框。
+  10. 按 F5 可重新整理頁面重新開始遊戲。
+*/
 
+let gameStarted = false; // 是否已開始遊戲（說明畫面）
 let player;
-let monsters = [];
-let npcs = [];
-let worldItems = []; // 儲存地上掉落的物品
-let villageMap;
-let wildernessMap;
-let currentMap; // 指向當前地圖 (villageMap 或 wildernessMap)
+let bullets = [];
+let enemies = [];
+let attackBullets = []; // 攻擊預警產生的子彈
+let partners = []; // 夥伴陣列
+let pickups = [];    // 補給道具
 
-let uiManager;
+// 預警相關
+let warningActive = false;
+let warningTimer = 0;    // 預警持續幀數
+let warningInterval = 200; // 兩次預警間隔（以 frame 計）
+let lastWarningFrame = 0;
+let warningType = "enemy"; // "enemy" 或 "attack"
+let roundCount = 0;  // 預警週期數
 
-// 相機/視口 控制
-let camera = {
-    x: 0,
-    y: 0,
-    targetX: 0, // 相機目標追蹤的 X (通常是玩家中心)
-    targetY: 0,
-    lerpAmount: 0.1 // 相機平滑移動速度
-};
+let enemySpawnCount = 1; // 每次敵人預警產生的敵人數量，每次累加
 
-let gameState = 'loading'; // 'loading', 'village', 'wilderness', 'inventory', 'gameOver'
-let lastMonsterSpawnTime = 0;
-const monsterSpawnInterval = 5000; // 5 秒檢查一次是否生怪 (野外)
+// 分數與開始時間
+let score = 0;
+let startTime;
+let gameOver = false;
+
+// 彈藥不足提示 (顯示 60 幀約 1 秒)
+let ammoWarningTimer = 0;
 
 function setup() {
-    createCanvas(windowWidth, windowHeight);
-    frameRate(60);
-    console.log("遊戲初始化...");
-
-    // --- 初始化管理器 ---
-    uiManager = new UIManager();
-
-     // --- 生成地圖 ---
-     console.log("生成村莊地圖...");
-     villageMap = new GameMap(MapSettings.villageWidth, MapSettings.villageHeight, true);
-     console.log("生成野外地圖...");
-     wildernessMap = new GameMap(MapSettings.wildernessWidth, MapSettings.wildernessHeight, false);
-
-    // --- 初始化玩家 ---
-    // 玩家初始位置在村莊的入口點附近
-    let playerStartX = villageMap.entryPoint ? villageMap.entryPoint.x : villageMap.mapWidthPixels / 2;
-    let playerStartY = villageMap.entryPoint ? villageMap.entryPoint.y : villageMap.mapHeightPixels / 2;
-    player = new Player(playerStartX, playerStartY);
-
-    // --- 初始化村莊 NPC ---
-    console.log("放置 NPC...");
-    npcs = []; // 清空 NPC 陣列
-    const npcIds = Object.keys(NpcData); // 獲取所有 NPC 類型 ID
-    villageMap.spawnPoints.forEach((spawnPos, index) => {
-         if (spawnPos) {
-              // 從 NpcData 隨機選擇或按順序分配 NPC 類型
-              let npcId = npcIds[index % npcIds.length]; // 循環使用 NPC ID
-              let newNpc = new Npc(npcId, spawnPos.x, spawnPos.y);
-              if (newNpc) {
-                  npcs.push(newNpc);
-                  console.log(`在村莊 (${spawnPos.x.toFixed(0)}, ${spawnPos.y.toFixed(0)}) 放置 ${newNpc.name}`);
-              }
-         }
-     });
-
-
-    // --- 設定初始狀態 ---
-    currentMap = villageMap; // 從村莊開始
-    gameState = 'village';
-    centerCameraOnPlayer(true); // 立即將相機居中到玩家
-    uiManager.addMessage(UIText.welcome, 'yellow', 5000);
-
-     // --- 添加初始物品 (測試用) ---
-     player.pickupItem(new DroppedItem(new Item('hp_potion_small', 5),0,0)); // 給5個小紅藥
-     player.pickupItem(new DroppedItem(new Item('rusty_sword'),0,0)); // 給一把破劍
-     player.pickupItem(new DroppedItem(new Item('leather_armor'),0,0));
-
-    console.log("遊戲設置完成，狀態:", gameState);
-     disableRightClickContextMenu(); // 禁用瀏覽器右鍵選單
+  createCanvas(800, 600);
+  angleMode(DEGREES);
+  // 遊戲開始前先建立玩家，初始位置放在畫面中心
+  player = new Player(width/2, height/2);
 }
 
 function draw() {
-    background(0); // 每幀清除背景為黑色
-
-    // 更新和繪製當前地圖
-    if (currentMap) {
-        // --- 更新相機 ---
-        updateCamera();
-
-        // --- 繪製地圖 (相對於相機) ---
-        currentMap.render(camera.x, camera.y, width, height);
-
-        // --- 更新和繪製掉落物品 ---
-        for (let i = worldItems.length - 1; i >= 0; i--) {
-            worldItems[i].render(camera.x, camera.y);
-            if (worldItems[i].isExpired()) {
-                 console.log(`${worldItems[i].item.name} 消失了`);
-                worldItems.splice(i, 1);
-            }
+  background(30);
+  
+  // 當未開始遊戲時顯示說明畫面
+  if (!gameStarted) {
+    showStartScreen();
+    return;
+  }
+  
+  if (gameOver) {
+    gameOverScreen();
+    return;
+  }
+  
+  // 顯示存活時間與擊殺數
+  let survivalTime = ((millis() - startTime) / 1000).toFixed(1);
+  fill(255);
+  textSize(16);
+  text("存活時間: " + survivalTime + " 秒", 10, 20);
+  text("擊殺數: " + score, 10, 40);
+  
+  // 顯示武器資訊（左下角）
+  push();
+  textSize(16);
+  fill(255);
+  let weaponName = "";
+  let ammoText = "";
+  if (player.weapon === 1) {
+    weaponName = "手槍";
+    ammoText = "∞";
+  } else if (player.weapon === 2) {
+    weaponName = "機槍";
+    ammoText = player.ammoMachine;
+  } else if (player.weapon === 3) {
+    weaponName = "散彈槍";
+    ammoText = player.ammoShotgun;
+  }
+  text("武器: " + weaponName + "  彈藥: " + ammoText, 10, height - 20);
+  pop();
+  
+  // 更新玩家並繪製
+  player.update();
+  player.show();
+  
+  // 若滑鼠持續按下左鍵則持續射擊
+  if (mouseIsPressed && mouseButton === LEFT) {
+    player.shoot();
+  }
+  
+  // 顯示彈藥不足提示 (顯示在玩家上方)
+  if (ammoWarningTimer > 0) {
+    push();
+    textAlign(CENTER, BOTTOM);
+    textSize(20);
+    fill(255, 0, 0);
+    text("彈藥不足!", player.x, player.y - player.size - 10);
+    pop();
+    ammoWarningTimer--;
+  }
+  
+  // 更新夥伴
+  for (let partner of partners) {
+    partner.update();
+    partner.show();
+  }
+  
+  // 更新並繪製子彈 (由玩家及夥伴發射)
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    bullets[i].update();
+    bullets[i].show();
+    if (bullets[i].offscreen()) {
+      bullets.splice(i, 1);
+      continue;
+    }
+    // 檢查子彈是否命中敵人
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      if (bullets[i].hits(enemies[j])) {
+        let ex = enemies[j].x;
+        let ey = enemies[j].y;
+        enemies.splice(j, 1);
+        score++;
+        // 掉落補給：1/10 機率掉落機槍或散彈槍補給
+        if (random() < 0.1) {
+          let dropType = random() < 0.5 ? 2 : 3;
+          pickups.push(new Pickup(ex, ey, dropType));
         }
-
-        // --- 更新和繪製 NPC ---
-         npcs.forEach(npc => {
-              // 只有當前地圖是村莊時才更新和繪製 NPC (或者根據 NPC 所在區域判斷)
-              if (currentMap.isVillage && npc) { // 確保 npc 實例存在
-                  npc.update(monsters, player); // NPC 會關注怪物和玩家
-                  npc.render(camera.x, camera.y);
-              }
-              // 如果 NPC 在野外？ 暫時不處理
-         });
-
-
-        // --- 更新和繪製怪物 ---
-         monsters.forEach(monster => {
-             if (monster && monster.state !== 'dead') { // 確保 monster 實例存在且未死亡
-                 monster.update(player, npcs.filter(n => n.canFight && n.state !== 'dead'), currentMap.grid); // 怪物關注玩家和能戰鬥的 NPC
-                 monster.render(camera.x, camera.y);
-             }
-             // 可以渲染死亡狀態的怪物屍體
-              else if (monster && monster.state === 'dead') {
-                  // monster.renderCorpse(camera.x, camera.y); // 實現一個繪製屍體的方法
-              }
-         });
-         // 清理已死亡的怪物 (可以延遲清理，先顯示屍體)
-         // monsters = monsters.filter(monster => monster.state !== 'dead');
-
-        // --- 更新和繪製玩家 ---
-        if (player && player.stats.hp > 0) {
-            let playerMoved = player.update(currentMap.grid, monsters, npcs);
-             player.render(camera.x, camera.y);
-             if (playerMoved) {
-                 // 如果玩家移動了，檢查是否踩到地圖切換點
-                 checkMapTransition();
-                  // 檢查是否踩到物品
-                  checkItemPickup();
-             }
-        } else if (player && player.stats.hp <= 0 && gameState !== 'gameOver') {
-             // 玩家死亡處理
-             gameState = 'gameOver';
-              uiManager.addMessage("你死了！", 'red', 10000);
-              console.log("遊戲結束");
-              // 可以在此顯示 GAME OVER 畫面或按鈕
-        }
-
-         // --- 野外怪物生成邏輯 ---
-         if (gameState === 'wilderness') {
-             spawnMonsters();
-         }
-
+        bullets.splice(i, 1);
+        break;
+      }
+    }
+  }
+  
+  // 更新攻擊預警產生的子彈
+  for (let i = attackBullets.length - 1; i >= 0; i--) {
+    attackBullets[i].update();
+    attackBullets[i].show();
+    if (attackBullets[i].offscreen()) {
+      attackBullets.splice(i, 1);
+      continue;
+    }
+    if (attackBullets[i].hits(player)) {
+      player.health -= 10;
+      attackBullets.splice(i, 1);
+    }
+  }
+  
+  // 更新敵人（普通與強化）
+  for (let enemy of enemies) {
+    enemy.update();
+    enemy.show();
+    if (enemy.hits(player)) {
+      player.health -= 1;
+    }
+    for (let partner of partners) {
+      if (!partner.bound && enemy.hits(partner)) {
+        partner.health -= 1;
+      }
+    }
+  }
+  enemies = enemies.filter(enemy => enemy.health > 0);
+  
+  // 更新補給道具
+  for (let i = pickups.length - 1; i >= 0; i--) {
+    pickups[i].show();
+    if (dist(pickups[i].x, pickups[i].y, player.x, player.y) < (player.size / 2 + pickups[i].size / 2)) {
+      if (pickups[i].type === 2) {
+        player.ammoMachine += 30;
+      } else if (pickups[i].type === 3) {
+        player.ammoShotgun += 30;
+      }
+      pickups.splice(i, 1);
+    }
+  }
+  
+  // 玩家死亡判斷
+  if (player.health <= 0) {
+    gameOver = true;
+  }
+  
+  // 處理預警
+  if (!warningActive && frameCount - lastWarningFrame > warningInterval) {
+    warningActive = true;
+    warningTimer = 60;
+    if (random() < 0.7) {
+      warningType = "enemy";
     } else {
-        // 地圖未載入？顯示錯誤或載入畫面
-        fill(255);
-        textAlign(CENTER, CENTER);
-        text("地圖載入中或錯誤...", width / 2, height / 2);
+      warningType = "attack";
     }
-
-
-    // --- 繪製 UI (覆蓋在所有遊戲元素之上) ---
-    if (uiManager) {
-        uiManager.render();
-    }
-
-     // --- 繪製 Game Over 畫面 ---
-     if (gameState === 'gameOver') {
-          push();
-          fill(0, 0, 0, 180); // 半透明黑色遮罩
-          rect(0, 0, width, height);
-          fill(255, 0, 0);
-          textSize(64);
-          textAlign(CENTER, CENTER);
-          text("GAME OVER", width / 2, height / 2);
-           textSize(20);
-           fill(200);
-            text("按 R 鍵重新開始", width / 2, height / 2 + 60);
-          pop();
-     }
-}
-
-// --- 相機控制 ---
-function updateCamera() {
-    if (!player) return;
-    // 設定相機目標為玩家位置
-    camera.targetX = player.pos.x - width / 2;
-    camera.targetY = player.pos.y - height / 2;
-
-    // 平滑移動相機
-    camera.x = lerp(camera.x, camera.targetX, camera.lerpAmount);
-    camera.y = lerp(camera.y, camera.targetY, camera.lerpAmount);
-
-    // 限制相機在地圖邊界內
-    if (currentMap) {
-        camera.x = constrain(camera.x, 0, currentMap.mapWidthPixels - width);
-        camera.y = constrain(camera.y, 0, currentMap.mapHeightPixels - height);
-    }
-}
-
-function centerCameraOnPlayer(immediate = false) {
-     if (!player) return;
-     camera.targetX = player.pos.x - width / 2;
-     camera.targetY = player.pos.y - height / 2;
-     if(immediate) {
-          camera.x = camera.targetX;
-          camera.y = camera.targetY;
-           // 限制邊界
-           if (currentMap) {
-               camera.x = constrain(camera.x, 0, currentMap.mapWidthPixels - width);
-               camera.y = constrain(camera.y, 0, currentMap.mapHeightPixels - height);
-           }
-     }
-}
-
-// --- 輸入處理 ---
-function mousePressed() {
-    if (gameState === 'gameOver') return; // 遊戲結束時不處理點擊
-
-    // 1. 檢查是否點擊在 UI 上
-    if (uiManager && uiManager.handleMouseClick(mouseX, mouseY)) {
-        return; // UI 優先處理事件
-    }
-
-    // 2. 如果背包是開啟的，點擊世界無效 (除非特別設計點擊關閉)
-    if (uiManager && uiManager.showInventory){
-          // 可以檢查是否點擊背包外部來關閉背包
-          if (!isMouseOverPanel(uiManager.inventoryPanel) && !isMouseOverPanel(uiManager.equipmentPanel)){
-              uiManager.toggleInventory();
-          }
-         return;
-    }
-
-
-    // 3. 點擊遊戲世界
-    let worldMx = mouseX + camera.x;
-    let worldMy = mouseY + camera.y;
-
-     // 檢查是否點擊到可拾取物品
-     let clickedItem = null;
-     let closestItemDistSq = (TILE_SIZE * 1.0)**2; // 點擊拾取範圍可以比懸停大一點
-     for (let item of worldItems) {
-         let dSq = distSq(worldMx, worldMy, item.pos.x, item.pos.y);
-         if (dSq < closestItemDistSq) {
-             clickedItem = item;
-             break; // 找到第一個即可
-         }
-     }
-     if (clickedItem) {
-          // 走向物品並嘗試拾取 (在 player.update 中處理靠近後的拾取)
-           console.log("嘗試走向物品: ", clickedItem.item.name);
-           player.moveTo(clickedItem.pos.x, clickedItem.pos.y);
-           // 也可以直接拾取，如果距離夠近
-          // if (distSq(player.pos.x, player.pos.y, clickedItem.pos.x, clickedItem.pos.y) < player.pickupRadiusSq) {
-          //     if (player.pickupItem(clickedItem)) {
-          //         worldItems.splice(worldItems.indexOf(clickedItem), 1); // 從世界移除
-          //     }
-          // }
-         return;
-     }
-
-
-    // 檢查是否點擊到怪物
-    let clickedMonster = null;
-    for (let monster of monsters) {
-         if(monster.state === 'dead') continue;
-        let dSq = distSq(worldMx, worldMy, monster.pos.x, monster.pos.y);
-        if (dSq < (monster.size / 1.5)**2) {
-            clickedMonster = monster;
-            break;
+  }
+  
+  if (warningActive) {
+    showWarning(warningType);
+    warningTimer--;
+    if (warningTimer <= 0) {
+      roundCount++;
+      if (warningType === "enemy") {
+        for (let i = 0; i < enemySpawnCount; i++) {
+          spawnEnemy();
         }
+        enemySpawnCount++;
+      } else if (warningType === "attack") {
+        spawnAttackBullets();
+      }
+      warningActive = false;
+      lastWarningFrame = frameCount;
+      
+      // 每 3 回合產生夥伴
+      if (roundCount % 3 === 0 && roundCount > 0) {
+        let alreadyBound = partners.some(p => p.bound);
+        if (roundCount === 3 || (!alreadyBound && random() < 0.5)) {
+          spawnPartner();
+        }
+      }
     }
-    if (clickedMonster) {
-        player.setAttackTarget(clickedMonster);
-        return;
-    }
-
-    // 檢查是否點擊到 NPC
-     let clickedNpc = null;
-     for(let npc of npcs) {
-          if(npc.state === 'dead') continue;
-           // 只處理村莊內的 NPC 互動
-          if (currentMap.isVillage) {
-              let dSq = distSq(worldMx, worldMy, npc.pos.x, npc.pos.y);
-               if (dSq < (npc.size / 1.5)**2) {
-                   clickedNpc = npc;
-                   break;
-               }
-          }
-     }
-     if(clickedNpc){
-          // 檢查距離，太遠則先移動過去
-          const interactDistSq = (TILE_SIZE * 2.0)**2;
-          if (distSq(player.pos.x, player.pos.y, clickedNpc.pos.x, clickedNpc.pos.y) < interactDistSq){
-              clickedNpc.interact(player);
-          } else {
-              player.moveTo(clickedNpc.pos.x, clickedNpc.pos.y); // 走向 NPC
-              // 可以設置一個回調，到達後自動互動？較複雜
-               uiManager.addMessage(`走向 ${clickedNpc.name}...`, 'gray');
-          }
-          return;
-     }
-
-
-    // 如果以上都不是，且點擊位置可通行，則移動
-    if (!currentMap.isObstacle(worldMx, worldMy) && !currentMap.isOutsideBounds(worldMx, worldMy)) {
-        player.moveTo(worldMx, worldMy);
-    }
+  }
+  
+  // --------------------------
+  // 新增：繪製瞄準輔助
+  // 在滑鼠位置畫一個白色瞄準框
+  push();
+  stroke(255);
+  noFill();
+  rectMode(CENTER);
+  rect(mouseX, mouseY, 20, 20);
+  pop();
+  
+  // 繪製從玩家到瞄準框之間的虛線連線
+  push();
+  stroke(255);
+  strokeWeight(1);
+  drawingContext.setLineDash([5, 5]);  // 設定虛線模式：5像素線段、5像素間隔
+  line(player.x, player.y, mouseX, mouseY);
+  drawingContext.setLineDash([]);      // 清除虛線設定
+  pop();
+  // --------------------------
 }
 
-function mouseMoved() {
-     if (gameState === 'gameOver') return;
-     if (uiManager) {
-         uiManager.handleMouseMove(mouseX, mouseY); // 更新 Tooltip 顯示
-     }
+// ===== 說明/開始畫面 =====
+function showStartScreen() {
+  background(50);
+  fill(255);
+  textAlign(CENTER, CENTER);
+  textSize(28);
+  text("戰場生存遊戲", width / 2, height / 2 - 160);
+  
+  textSize(16);
+  let instructions =
+    "操作方式：\n" +
+    "  移動：方向鍵 / WASD\n" +
+    "  射擊：空白鍵 或 滑鼠左鍵（按住持續射擊）\n" +
+    "  切換武器：數字鍵 1 (手槍)、2 (機槍)、3 (散彈槍)\n\n" +
+    "武器說明：\n" +
+    "  手槍：每秒 2 發，無限彈藥\n" +
+    "  機槍：初始 100 發，每秒約 10 發\n" +
+    "  散彈槍：每次發射 7 顆子彈，扣 7 發彈藥\n\n" +
+    "其他：\n" +
+    "  預警後會有敵人或攻擊子彈出現，敵人數量逐次增加。\n" +
+    "  每 3 回合可能有夥伴被救援，夥伴固定出現在畫面中心，顯示「救我!」。\n" +
+    "  敵人被打死時有機率掉落補給道具（補給上會有提示），撿到後增加 30 發彈藥。\n" +
+    "  強化敵人移動更快，並有紅色拖尾，登場時喊「去死吧!」。\n\n" +
+    "新增瞄準輔助：\n" +
+    "  滑鼠位置會出現白色瞄準框，並以虛線連接玩家與瞄準框。\n\n" +
+    "按任意鍵開始遊戲";
+    
+  text(instructions, width / 2, height / 2 - 60);
 }
 
-
+// 按任意鍵開始遊戲
 function keyPressed() {
-    if (gameState === 'gameOver') {
-         if (key === 'r' || key === 'R') {
-             restartGame();
-         }
-         return;
-    }
+  if (!gameStarted) {
+    gameStarted = true;
+    startTime = millis();
+    return;
+  }
+  if (key === ' ') {
+    player.shoot();
+  }
+  if (key === '1') {
+    player.weapon = 1;
+  } else if (key === '2') {
+    player.weapon = 2;
+  } else if (key === '3') {
+    player.weapon = 3;
+  }
+}
 
-    // --- UI 控制 ---
-    if (key === 'i' || key === 'I') { // 按 I 開/關背包
-        uiManager.toggleInventory();
-    }
-    if (key === 'Escape') { // 按 ESC 關閉背包 (如果開啟)
-        if (uiManager.showInventory) {
-            uiManager.toggleInventory();
-        } else {
-            // 未來可以打開遊戲選單
+// ===== 產生各物件 =====
+
+// 預警繪製
+function showWarning(type) {
+  push();
+  noStroke();
+  let textHeight = 50;
+  if (type === "enemy") {
+    fill(255, 0, 0, 150);
+  } else if (type === "attack") {
+    fill(255, 100, 100, 150);
+  }
+  rect(0, 0, width * 0.2, height);
+  rect(width * 0.8, 0, width * 0.2, height);
+  rect(0, 0, width, textHeight);
+  rect(0, height - textHeight, width, textHeight);
+  
+  textAlign(CENTER, CENTER);
+  textSize(32);
+  fill(255);
+  if (type === "enemy") {
+    text("敵人即將出現！", width / 2, height / 2);
+  } else if (type === "attack") {
+    text("攻擊預警！", width / 2, height / 2);
+  }
+  pop();
+}
+
+// 產生敵人 — 保證從畫面外出現
+function spawnEnemy() {
+  let side = floor(random(4));
+  let x, y;
+  let margin = 30;
+  if (side === 0) { // 上
+    x = random(0, width);
+    y = -margin;
+  } else if (side === 1) { // 右
+    x = width + margin;
+    y = random(0, height);
+  } else if (side === 2) { // 下
+    x = random(0, width);
+    y = height + margin;
+  } else { // 左
+    x = -margin;
+    y = random(0, height);
+  }
+  if (random() < 0.2) {
+    enemies.push(new StrongEnemy(x, y));
+  } else {
+    enemies.push(new Enemy(x, y));
+  }
+}
+
+// 產生攻擊預警的子彈
+function spawnAttackBullets() {
+  let count = 5;
+  for (let i = 0; i < count; i++) {
+    let side = floor(random(4));
+    let x, y;
+    if (side === 0) { x = random(width); y = -10; }
+    else if (side === 1) { x = width + 10; y = random(height); }
+    else if (side === 2) { x = random(width); y = height + 10; }
+    else { x = -10; y = random(height); }
+    attackBullets.push(new AttackBullet(x, y, player.x, player.y));
+  }
+}
+
+// 產生被綁住的夥伴 — 固定出現在畫面中心
+function spawnPartner() {
+  partners.push(new Partner(width / 2, height / 2));
+}
+
+// ===== 各物件類別 =====
+
+// --- 玩家 ---
+class Player {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.size = 30;
+    this.speed = 3;
+    this.health = 100;
+    this.cooldown = 0;
+    // 武器：1-手槍、2-機槍、3-散彈槍
+    this.weapon = 1;
+    this.ammoMachine = 100;
+    this.ammoShotgun = 100;
+  }
+  
+  update() {
+    if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) { this.x -= this.speed; }
+    if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) { this.x += this.speed; }
+    if (keyIsDown(UP_ARROW) || keyIsDown(87)) { this.y -= this.speed; }
+    if (keyIsDown(DOWN_ARROW) || keyIsDown(83)) { this.y += this.speed; }
+    this.x = constrain(this.x, this.size / 2, width - this.size / 2);
+    this.y = constrain(this.y, this.size / 2, height - this.size / 2);
+    if (this.cooldown > 0) this.cooldown--;
+  }
+  
+  show() {
+    push();
+    translate(this.x, this.y);
+    fill(0, 0, 255);
+    noStroke();
+    ellipse(0, 0, this.size);
+    pop();
+    push();
+    noStroke();
+    fill(0, 255, 0);
+    rect(this.x - this.size / 2, this.y - this.size, map(this.health, 0, 100, 0, this.size), 5);
+    pop();
+  }
+  
+  shoot() {
+    if (this.cooldown > 0) return;
+    let angle = atan2(mouseY - this.y, mouseX - this.x);
+    if (this.weapon === 1) {
+      // 手槍：每次一發，冷卻 30 幀
+      bullets.push(new Bullet(this.x, this.y, angle));
+      this.cooldown = 30;
+    } else if (this.weapon === 2) {
+      // 機槍：需彈藥，冷卻 6 幀
+      if (this.ammoMachine > 0) {
+        bullets.push(new Bullet(this.x, this.y, angle));
+        this.cooldown = 6;
+        this.ammoMachine--;
+      } else {
+        ammoWarningTimer = 60;
+      }
+    } else if (this.weapon === 3) {
+      // 散彈槍：每次發射 7 顆子彈，扣 7 發彈藥，冷卻 20 幀
+      if (this.ammoShotgun >= 7) {
+        let baseAngle = angle;
+        for (let i = 0; i < 7; i++) {
+          let spread = map(i, 0, 6, -15, 15);
+          bullets.push(new Bullet(this.x, this.y, baseAngle + spread));
         }
-    }
-
-    // --- 測試用按鍵 ---
-     if (key === 'l' || key === 'L') { // 測試升級
-         player.gainXP(player.stats.xpToNextLevel - player.stats.xp + 1);
-     }
-     if (key === 'h' || key === 'H') { // 測試補血
-         player.stats.hp = min(player.currentStats.maxHP, player.stats.hp + 50);
-         uiManager.addFloatingText("+50", player.pos.x, player.pos.y, 'lime');
-     }
-      if (key === 'k' || key === 'K') { // 測試秒殺最近的怪物
-          let closestMonster = null;
-          let minDistSq = Infinity;
-          for(let m of monsters){
-               if(m.state !== 'dead'){
-                    let dSq = distSq(player.pos.x, player.pos.y, m.pos.x, m.pos.y);
-                    if(dSq < minDistSq){
-                         minDistSq = dSq;
-                         closestMonster = m;
-                    }
-               }
-          }
-          if(closestMonster) closestMonster.takeDamage(9999, player);
-     }
-     if (key === 't' || key === 'T') { // 測試傳送回村莊入口
-          if(currentMap !== villageMap) {
-               switchMap(villageMap, villageMap.entryPoint);
-          } else {
-               player.pos.set(villageMap.entryPoint || createVector(villageMap.mapWidthPixels/2, villageMap.mapHeightPixels/2));
-               centerCameraOnPlayer(true);
-          }
-     }
-}
-
-// --- 遊戲邏輯輔助函式 ---
-
-function checkMapTransition() {
-     if (!player || !currentMap) return;
-
-     if (currentMap.isVillage && currentMap.isOnExit(player.pos.x, player.pos.y)) {
-         console.log("離開村莊，進入野外");
-         // 切換到野外地圖，將玩家放在野外地圖的入口點
-         switchMap(wildernessMap, wildernessMap.entryPoint);
-         uiManager.addMessage(UIText.leaveVillage, 'orange');
-
-     } else if (!currentMap.isVillage && currentMap.isOnVillageEntrance(player.pos.x, player.pos.y)) {
-          console.log("回到村莊");
-          // 切換回村莊地圖，將玩家放在村莊地圖的入口點
-          switchMap(villageMap, villageMap.entryPoint);
-           uiManager.addMessage(UIText.enterVillage, 'lightblue');
-     }
-}
-
-function switchMap(newMap, playerSpawnPoint) {
-     // 清理當前地圖的臨時狀態 (例如野外的怪物和掉落物)
-     if (currentMap === wildernessMap) {
-          console.log("清理野外怪物和掉落物");
-          monsters = []; // 離開野外時清除所有怪物
-          worldItems = []; // 清除所有掉落物 (或者可以設計保留？)
-          lastMonsterSpawnTime = 0; // 重置生怪計時器
-     } else if (currentMap === villageMap) {
-           // 離開村莊時，NPC 回到原位？或保持狀態？
-           // 村民可以回到 idle 狀態
-           npcs.forEach(npc => {
-                npc.targetEnemy = null;
-                if(npc.stats.hp > 0) npc.state = 'idle';
-           });
-     }
-
-     currentMap = newMap;
-     gameState = currentMap.isVillage ? 'village' : 'wilderness';
-
-      // 重新生成/放置當前地圖的單位 (如果需要)
-      if (currentMap.isVillage && npcs.length === 0) {
-           // 如果 NPC 被清空了 (例如遊戲重啟)，重新放置
-           console.log("重新放置村莊 NPC");
-           npcs = [];
-            const npcIds = Object.keys(NpcData);
-           villageMap.spawnPoints.forEach((spawnPos, index) => {
-             if (spawnPos) {
-                  let npcId = npcIds[index % npcIds.length];
-                  let newNpc = new Npc(npcId, spawnPos.x, spawnPos.y);
-                  if (newNpc) npcs.push(newNpc);
-             }
-            });
+        this.cooldown = 20;
+        this.ammoShotgun -= 7;
+      } else {
+        ammoWarningTimer = 60;
       }
-
-
-     // 移動玩家到新地圖的指定入口點
-     if (player && playerSpawnPoint) {
-         player.pos.set(playerSpawnPoint);
-         player.targetPos.set(playerSpawnPoint); // 停止移動
-         player.isMoving = false;
-         player.targetEnemy = null; // 清除目標
-     }
-     centerCameraOnPlayer(true); // 將相機立即移動到新位置
-      console.log(`切換到地圖: ${currentMap.isVillage ? '村莊' : '野外'}, 狀態: ${gameState}`);
-
-      // 重新計算 UI 佈局，以防視窗大小改變
-      uiManager.calculateLayout();
-}
-
-
-function spawnMonsters() {
-     if (!currentMap || currentMap.isVillage) return; // 只在野外生怪
-
-     const now = millis();
-     if (now - lastMonsterSpawnTime > monsterSpawnInterval) {
-         lastMonsterSpawnTime = now;
-
-         if (monsters.filter(m => m.state !== 'dead').length < MapSettings.maxMonsters) {
-             const spawnPoint = currentMap.getRandomSpawnPoint();
-             if (spawnPoint) {
-                  // 檢查出生點是否在螢幕內，如果在螢幕內則暫緩生成 (避免刷臉)
-                  if (spawnPoint.x > camera.x && spawnPoint.x < camera.x + width &&
-                      spawnPoint.y > camera.y && spawnPoint.y < camera.y + height) {
-                       // console.log("怪物出生點在螢幕內，暫緩生成");
-                       return;
-                  }
-
-
-                 // 根據區域或玩家等級決定生成什麼怪物 (暫時隨機)
-                 const monsterIds = Object.keys(MonsterData);
-                 const randomMonsterId = randomFromArray(monsterIds);
-
-                 if (randomMonsterId) {
-                      // 檢查該點是否已經有怪物 (避免重疊生成)
-                      let tooClose = false;
-                      for(let m of monsters){
-                           if(m.state !== 'dead' && distSq(spawnPoint.x, spawnPoint.y, m.pos.x, m.pos.y) < (TILE_SIZE*2)**2){
-                                tooClose = true; break;
-                           }
-                      }
-
-                      if(!tooClose){
-                          let newMonster = new Monster(randomMonsterId, spawnPoint.x, spawnPoint.y);
-                          if (newMonster) {
-                              monsters.push(newMonster);
-                              // console.log(`在野外 (${spawnPoint.x.toFixed(0)}, ${spawnPoint.y.toFixed(0)}) 生成了 ${newMonster.name}`);
-                          }
-                      }
-                 }
-             } else {
-                  // console.log("沒有可用的怪物出生點?");
-             }
-         }
-     }
-}
-
-function checkItemPickup() {
-      if (!player || !worldItems || worldItems.length === 0) return;
-
-      const pickupRadiusSq = (player.size * 0.8)**2; // 玩家拾取範圍的平方
-
-      for (let i = worldItems.length - 1; i >= 0; i--) {
-          const item = worldItems[i];
-          if (distSq(player.pos.x, player.pos.y, item.pos.x, item.pos.y) < pickupRadiusSq) {
-              if (player.pickupItem(item)) { // 嘗試拾取
-                  worldItems.splice(i, 1); // 如果拾取成功，從世界中移除
-              } else {
-                  // 背包滿了，物品留在原地
-              }
-              // 一次只撿一個？或者可以繼續檢查下一個？看設計
-              // break; // 撿到一個就停止本次檢查
-          }
-      }
-}
-
-function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-    if (uiManager) {
-        uiManager.calculateLayout(); // 重新計算 UI 佈局
     }
-     centerCameraOnPlayer(true); // 視窗大小改變後重新居中相機
+  }
 }
 
-function restartGame() {
-     console.log("重新開始遊戲...");
-     // 清空所有狀態
-     monsters = [];
-     npcs = [];
-     worldItems = [];
-     lastMonsterSpawnTime = 0;
-
-      // 重新生成地圖 (為了隨機性)
-     console.log("重新生成地圖...");
-      villageMap = new GameMap(MapSettings.villageWidth, MapSettings.villageHeight, true);
-      wildernessMap = new GameMap(MapSettings.wildernessWidth, MapSettings.wildernessHeight, false);
-
-
-     // 重新初始化玩家到村莊
-     let playerStartX = villageMap.entryPoint ? villageMap.entryPoint.x : villageMap.mapWidthPixels / 2;
-     let playerStartY = villageMap.entryPoint ? villageMap.entryPoint.y : villageMap.mapHeightPixels / 2;
-     player = new Player(playerStartX, playerStartY);
-
-
-      // 重新放置 NPC
-      console.log("重新放置 NPC...");
-       const npcIds = Object.keys(NpcData);
-       villageMap.spawnPoints.forEach((spawnPos, index) => {
-          if (spawnPos) {
-               let npcId = npcIds[index % npcIds.length];
-               let newNpc = new Npc(npcId, spawnPos.x, spawnPos.y);
-               if (newNpc) npcs.push(newNpc);
-          }
-      });
-
-     // 重置 UI 和狀態
-     uiManager = new UIManager(); // 重新創建 UI 管理器
-     currentMap = villageMap;
-     gameState = 'village';
-     centerCameraOnPlayer(true);
-     uiManager.addMessage(UIText.welcome, 'yellow', 5000);
-
-      // 添加初始物品
-      player.pickupItem(new DroppedItem(new Item('hp_potion_small', 5),0,0));
-      player.pickupItem(new DroppedItem(new Item('rusty_sword'),0,0));
-      player.pickupItem(new DroppedItem(new Item('leather_armor'),0,0));
-
-     console.log("遊戲已重新開始。");
+// --- 夥伴 ---
+class Partner {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.size = 25;
+    this.speed = 2;
+    this.health = 50;
+    this.cooldown = 0;
+    this.bound = true;
+    // 跟隨相關：固定距離與目標角度，每 30 幀更新一次
+    this.followTimer = 0;
+    this.offsetAngle = random(360);
+    this.radius = 50;
+  }
+  
+  update() {
+    if (this.bound) {
+      let d = dist(this.x, this.y, player.x, player.y);
+      if (d < (this.size / 2 + player.size / 2)) {
+        this.bound = false;
+      }
+    } else {
+      this.followTimer--;
+      if (this.followTimer <= 0) {
+        this.offsetAngle = random(360);
+        this.followTimer = 30;
+      }
+      let targetX = player.x + this.radius * cos(this.offsetAngle);
+      let targetY = player.y + this.radius * sin(this.offsetAngle);
+      // 緩慢移動到目標點
+      this.x = lerp(this.x, targetX, 0.05);
+      this.y = lerp(this.y, targetY, 0.05);
+      
+      if (this.cooldown > 0) this.cooldown--;
+      else this.shoot();
+    }
+  }
+  
+  show() {
+    push();
+    translate(this.x, this.y);
+    fill(this.bound ? 150 : 0, this.bound ? 150 : 255, this.bound ? 150 : 0);
+    noStroke();
+    ellipse(0, 0, this.size);
+    pop();
+    push();
+    noStroke();
+    fill(255, 255, 0);
+    rect(this.x - this.size / 2, this.y - this.size, map(this.health, 0, 50, 0, this.size), 4);
+    pop();
+    if (this.bound) {
+      push();
+      textAlign(CENTER, BOTTOM);
+      textSize(16);
+      fill(255);
+      text("救我!", this.x, this.y - this.size / 2 - 5);
+      pop();
+    }
+  }
+  
+  shoot() {
+    if (enemies.length === 0) return;
+    let nearest = enemies[0];
+    let nearestD = dist(this.x, this.y, nearest.x, nearest.y);
+    for (let enemy of enemies) {
+      let d = dist(this.x, this.y, enemy.x, enemy.y);
+      if (d < nearestD) {
+        nearest = enemy;
+        nearestD = d;
+      }
+    }
+    let angle = atan2(nearest.y - this.y, nearest.x - this.x);
+    bullets.push(new Bullet(this.x, this.y, angle));
+    this.cooldown = 30;
+  }
 }
 
-// 檢查滑鼠是否在 UI 面板上
-function isMouseOverPanel(panel) {
-    if (!panel) return false;
-    return mouseX > panel.x && mouseX < panel.x + panel.w &&
-           mouseY > panel.y && mouseY < panel.y + panel.h;
+// --- 子彈 ---
+class Bullet {
+  constructor(x, y, angle) {
+    this.x = x;
+    this.y = y;
+    this.r = 5;
+    this.speed = 7;
+    this.angle = angle;
+    this.trail = [];
+  }
+  
+  update() {
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 10) {
+      this.trail.shift();
+    }
+    this.x += this.speed * cos(this.angle);
+    this.y += this.speed * sin(this.angle);
+  }
+  
+  show() {
+    push();
+    noFill();
+    stroke(255, 255, 0, 100);
+    beginShape();
+    for (let pos of this.trail) {
+      vertex(pos.x, pos.y);
+    }
+    endShape();
+    pop();
+    push();
+    fill(255, 255, 0);
+    noStroke();
+    ellipse(this.x, this.y, this.r * 2);
+    pop();
+  }
+  
+  offscreen() {
+    return (this.x < 0 || this.x > width || this.y < 0 || this.y > height);
+  }
+  
+  hits(target) {
+    let d = dist(this.x, this.y, target.x, target.y);
+    return d < this.r + target.size / 2;
+  }
 }
 
-// 禁用瀏覽器右鍵選單
-function disableRightClickContextMenu(){
-     document.addEventListener('contextmenu', event => event.preventDefault());
+// --- 攻擊預警產生的子彈 ---
+class AttackBullet {
+  constructor(x, y, targetX, targetY) {
+    this.x = x;
+    this.y = y;
+    this.r = 6;
+    this.speed = 5;
+    this.angle = atan2(targetY - this.y, targetX - this.x);
+  }
+  
+  update() {
+    this.x += this.speed * cos(this.angle);
+    this.y += this.speed * sin(this.angle);
+  }
+  
+  show() {
+    push();
+    fill(255, 150, 0);
+    noStroke();
+    ellipse(this.x, this.y, this.r * 2);
+    pop();
+  }
+  
+  offscreen() {
+    return (this.x < -20 || this.x > width + 20 || this.y < -20 || this.y > height + 20);
+  }
+  
+  hits(target) {
+    let d = dist(this.x, this.y, target.x, target.y);
+    return d < this.r + target.size / 2;
+  }
+}
+
+// --- 普通敵人 ---
+class Enemy {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.size = 30;
+    this.speed = 1.5;
+    this.health = 1;
+  }
+  
+  update() {
+    let angle = atan2(player.y - this.y, player.x - this.x);
+    this.x += this.speed * cos(angle);
+    this.y += this.speed * sin(angle);
+  }
+  
+  show() {
+    push();
+    translate(this.x, this.y);
+    fill(255, 0, 0);
+    noStroke();
+    rectMode(CENTER);
+    rect(0, 0, this.size, this.size);
+    pop();
+  }
+  
+  hits(target) {
+    let d = dist(this.x, this.y, target.x, target.y);
+    return d < (this.size / 2 + target.size / 2);
+  }
+}
+
+// --- 強化敵人 ---
+class StrongEnemy {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.size = 30;
+    this.speed = 3;
+    this.health = 1;
+    this.speechTimer = 60; // 顯示對話 1 秒 (60 幀)
+    this.trail = [];
+  }
+  
+  update() {
+    let angle = atan2(player.y - this.y, player.x - this.x);
+    this.x += this.speed * cos(angle);
+    this.y += this.speed * sin(angle);
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 15) {
+      this.trail.shift();
+    }
+    if (this.speechTimer > 0) this.speechTimer--;
+  }
+  
+  show() {
+    push();
+    noFill();
+    stroke(255, 0, 0, 100);
+    beginShape();
+    for (let pos of this.trail) {
+      vertex(pos.x, pos.y);
+    }
+    endShape();
+    pop();
+    
+    push();
+    translate(this.x, this.y);
+    fill(255, 0, 0);
+    noStroke();
+    rectMode(CENTER);
+    rect(0, 0, this.size, this.size);
+    pop();
+    
+    if (this.speechTimer > 0) {
+      push();
+      textAlign(CENTER, BOTTOM);
+      textSize(14);
+      fill(255);
+      text("去死吧!", this.x, this.y - this.size / 2 - 5);
+      pop();
+    }
+  }
+  
+  hits(target) {
+    let d = dist(this.x, this.y, target.x, target.y);
+    return d < (this.size / 2 + target.size / 2);
+  }
+}
+
+// --- 補給道具 ---
+class Pickup {
+  constructor(x, y, type) {
+    this.x = x;
+    this.y = y;
+    this.type = type; // 2: 機槍, 3: 散彈槍
+    this.size = 20;
+  }
+  
+  show() {
+    push();
+    translate(this.x, this.y);
+    if (this.type === 2) {
+      fill(0, 255, 255);
+      textAlign(CENTER, BOTTOM);
+      textSize(12);
+      text("機槍彈藥", 0, -this.size / 2 - 2);
+    } else if (this.type === 3) {
+      fill(255, 0, 255);
+      textAlign(CENTER, BOTTOM);
+      textSize(12);
+      text("散彈槍彈藥", 0, -this.size / 2 - 2);
+    }
+    noStroke();
+    ellipse(0, 0, this.size);
+    pop();
+  }
+}
+
+// --- 遊戲結束畫面 ---
+function gameOverScreen() {
+  background(0);
+  fill(255, 0, 0);
+  textAlign(CENTER, CENTER);
+  textSize(48);
+  text("遊戲結束", width / 2, height / 2 - 40);
+  textSize(32);
+  let survivalTime = ((millis() - startTime) / 1000).toFixed(1);
+  text("存活時間: " + survivalTime + " 秒", width / 2, height / 2);
+  text("擊殺數: " + score, width / 2, height / 2 + 40);
+  textSize(20);
+  text("按 F5 重新開始", width / 2, height / 2 + 80);
 }
