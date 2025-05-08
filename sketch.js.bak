@@ -1,4006 +1,2410 @@
-console.log("Loading: gamedata.js");
-const TILE_SIZE = 40; // 地圖格子大小
+/*
+  頂尖 HTML5 / JavaScript 遊戲工程師實現的 p5.js 單檔遊戲
+  遊戲名稱：簡易版卡牌對戰 (Inspired by Clash Royale)
+*/
 
-// --- 提示文字 ---
-const UIText = {
-    hp: "生命",
-    mp: "魔力",
-    level: "等級",
-    xp: "經驗",
-    attack: "攻擊",
-    defense: "防禦",
-    inventory: "背包",
-    equip: "裝備",
-    use: "使用",
-    drop: "丟棄",
-    pickup: "拾取",
-    moveTo: "移動到",
-    attackTarget: "攻擊",
-    npcGreeting: ["你好，冒險者！", "村莊很安全，外面很危險。", "需要幫忙嗎？"],
-    enemySpotted: "發現敵人!",
-    levelUp: "升級了！",
-    itemDropped: "掉落了",
-    inventoryFull: "背包已滿！",
-    welcome: "歡迎來到庇護村",
-    leaveVillage: "離開村莊",
-    enterVillage: "進入村莊",
-    // ... 更多提示
-};
+// --- 遊戲設定與常數 ---
+const APP_VERSION = "1.0.0";
+const CANVAS_WIDTH = 1280;
+const CANVAS_HEIGHT = 720;
+const FPS_TARGET = 60;
 
-// --- 物品資料 ---
-const ItemData = {
-    // 消耗品
-    'hp_potion_small': { name: "小型生命藥水", type: 'consumable', effect: { hp: 50 }, stackable: true, maxStack: 10, icon: 'red_potion', description: "恢復少量生命值。", rarity: 'common'},
-    'mp_potion_small': { name: "小型魔力藥水", type: 'consumable', effect: { mp: 30 }, stackable: true, maxStack: 10, icon: 'blue_potion', description: "恢復少量魔力值。", rarity: 'common'},
-    // 裝備 - 武器
-    'rusty_sword': { name: "生鏽的劍", type: 'equipment', slot: 'weapon', stats: { attack: 3 }, icon: 'sword1', description: "一把看起來快壞掉的劍。", rarity: 'common' },
-    'short_bow': { name: "短弓", type: 'equipment', slot: 'weapon', stats: { attack: 4 }, icon: 'bow1', description: "適合新手使用的弓。", rarity: 'common' },
-    'sharp_dagger': { name: "鋒利的匕首", type: 'equipment', slot: 'weapon', stats: { attack: 5 }, icon: 'dagger1', description: "輕巧但致命。", rarity: 'uncommon'}, // 改為 uncommon
-    'glowing_staff': { name: "發光的法杖", type: 'equipment', slot: 'weapon', stats: { attack: 4, maxMP: 20}, icon: 'staff1', description: "頂端鑲嵌著微光的寶石。", rarity: 'uncommon'},
-    // 裝備 - 防具
-    'leather_armor': { name: "皮甲", type: 'equipment', slot: 'armor', stats: { defense: 2 }, icon: 'armor1', description: "基本的皮革護甲。", rarity: 'common' },
-    'iron_helmet': { name: "鐵盔", type: 'equipment', slot: 'helmet', stats: { defense: 3 }, icon: 'helmet1', description: "提供頭部基本保護。", rarity: 'common'},
-    'hardened_leather_boots': { name: "硬皮靴", type: 'equipment', slot: 'boots', stats: { defense: 1, speed: 0.2 }, icon: 'boots1', description: "比普通靴子更耐用。", rarity: 'uncommon'}, // 加了靴子
-    'magic_ring': { name: "魔力戒指", type: 'equipment', slot: 'ring', stats: { maxMP: 15 }, icon: 'ring1', description: "一個帶有微弱魔力的戒指。", rarity: 'rare'}, // 加了稀有戒指
-    // 材料
-    'goblin_ear': { name: "哥布林耳朵", type: 'material', stackable: true, maxStack: 50, icon: 'monster_part', description: "哥布林的耳朵，或許能賣錢。", rarity: 'common' },
-};
+const TILE_SIZE = 40; // 遊戲世界的格子大小，用於單位尺寸和距離
 
-// --- 怪物資料 ---
-const MonsterData = {
-    'goblin': {
-        name: "哥布林", hp: 25, mp: 0, attack: 5, defense: 1, xp: 10, speed: 2,
-        attackType: 'melee', // 近戰
-        attackRange: TILE_SIZE * 1.2, // 近戰攻擊距離稍短
-        aggroRange: TILE_SIZE * 5,
-        color: [0, 150, 0], size: TILE_SIZE * 0.8,
-        icon: 'goblin', // 圖示標識
-        lootTable: [
-            { itemId: 'hp_potion_small', chance: 0.3 },
-            { itemId: 'goblin_ear', chance: 0.7 },
-            { itemId: 'rusty_sword', chance: 0.05 },
-            { itemId: 'sharp_dagger', chance: 0.02} // 有機率掉落匕首
-        ]
-    },
-    'skeleton': {
-        name: "骷髏弓箭手", hp: 43, mp: 0, attack: 2, defense: 3, xp: 18, speed: 2.5, // 攻擊力降低一點，因為是遠程
-        attackType: 'ranged', // 遠程
-        attackRange: TILE_SIZE * 6, // 遠程攻擊距離
-        projectileType: 'arrow', // 投射物類型
-        projectileSpeed: 7,
-        projectileDamage: 6, // 投射物基礎傷害 (可以獨立於怪物攻擊力)
-        aggroRange: TILE_SIZE * 8, // 遠程怪索敵範圍更大
-        color: [200, 200, 200], size: TILE_SIZE * 0.9,
-        icon: 'skeleton', // 圖示標識
-        lootTable: [
-            { itemId: 'hp_potion_small', chance: 0.2 },
-            { itemId: 'mp_potion_small', chance: 0.1 },
-            { itemId: 'leather_armor', chance: 0.08 },
-            { itemId: 'short_bow', chance: 0.04 } // 有機率掉落弓
-        ]
-    },
-    'bat': {
-        name: "巨型蝙蝠", hp: 20, mp: 0, attack: 4, defense: 0, xp: 8, speed: 3.5, // 速度加快
-        attackType: 'melee',
-        attackRange: TILE_SIZE * 1.0,
-        aggroRange: TILE_SIZE * 7,
-        color: [50, 50, 50], size: TILE_SIZE * 0.6,
-        icon: 'bat',
-        lootTable: [
-             { itemId: 'hp_potion_small', chance: 0.15 },
-        ]
-    }
-    // ... 更多怪物
-};
+const ELIXIR_MAX = 10;
+const ELIXIR_RATE_NORMAL = 1 / 2.8; // 每秒聖水回復量
+const ELIXIR_RATE_OVERTIME = 3 / 2.8; // 加時賽聖水回復量 (規格指定3倍)
 
-// --- NPC 資料 ---
-const NpcData = {
-    'villager_elder': {
-        name: "村長", hp: 100, attack: 5, defense: 2,
-        color: [0, 0, 200], size: TILE_SIZE * 0.9,
-        icon: 'elder',
-        dialogue: ["願聖光指引你。", "村外的世界很危險，小心行事。", "有什麼需要可以找鐵匠或商人。"],
-        canFight: true,
-        aggroRange: TILE_SIZE * 4,
-        attackRange: TILE_SIZE * 1.5
-    },
-    'villager_guard': {
-        name: "衛兵", hp: 150, attack: 15, defense: 5,
-        color: [150, 150, 150], size: TILE_SIZE * 0.9,
-        icon: 'guard',
-        dialogue: ["站住！此處是安全的村莊。", "我會保護這裡的。", "看到可疑人物請告訴我。"],
-        canFight: true,
-        aggroRange: TILE_SIZE * 6,
-        attackRange: TILE_SIZE * 1.8,
-         pursuitRangeMultiplier: 1.5 // 衛兵會稍微追擊跑遠的敵人
-    },
-    'villager_farmer': {
-        name: "農夫", hp: 80, attack: 3, defense: 1,
-        color: [139, 69, 19], size: TILE_SIZE * 0.8,
-        icon: 'farmer',
-        dialogue: ["希望今年收成好...", "唉，怪物越來越多了。", "小心點，年輕人。"],
-        canFight: false
-    }
-    // ... 更多 NPC (商人、鐵匠等)
-};
+const MATCH_DURATION_SECONDS = 3 * 60; // 3分鐘
+const OVERTIME_DURATION_SECONDS = 2 * 60; // 2分鐘
+const TIEBREAKER_DURATION_SECONDS = 30; // 30秒
+const TIEBREAKER_HP_LOSS_PER_SECOND = 100;
 
-// --- 玩家初始設定 ---
-const PlayerDefaults = {
-    hp: 110,
-    mp: 50,
-    attack: 5,
-    defense: 1,
-    speed: 3.5, // 稍微提高基礎速度
-    level: 1,
-    xp: 0,
-    xpToNextLevel: 100,
-    attackRange: TILE_SIZE * 1.5, // 基礎攻擊範圍 (近戰)
-    pickupRadiusSq: (TILE_SIZE * 1.2) ** 2, // 拾取範圍平方
-    inventorySize: 20,
-    color: [255, 215, 0],
-    size: TILE_SIZE * 0.9
-};
+const KING_TOWER_Y_OFFSET = 50;
+const PRINCESS_TOWER_Y_OFFSET = 60;
+const PRINCESS_TOWER_X_SPACING = 200; // 公主塔與中線的水平距離
 
-// --- 地圖設定 ---
-const MapSettings = {
-    wildernessWidth: 100,
-    wildernessHeight: 100,
-    villageWidth: 25, // 村莊稍微大一點
-    villageHeight: 25,
-    wallThickness: 1,
-    noiseScale: 0.08, // 調整噪聲參數
-    obstacleDensity: 0.1,
-    maxMonsters: 40, // 稍微降低最大怪物數，提高性能
-    monsterSpawnInterval: 3500, // 怪物生成間隔 (ms)
-    monsterSpawnCheckRadius: TILE_SIZE * 15, // 玩家周圍多大範圍內不生怪
-};
+const BRIDGE_Y_POSITION = CANVAS_HEIGHT / 2;
+const BRIDGE_WIDTH = 120;
+const BRIDGE_HEIGHT = 60;
 
-// --- 稀有度顏色 (用於 UI 和 Tooltip) ---
-const RarityColors = {
-    common: '#FFFFFF',    // 白色
-    uncommon: '#00FF00',  // 綠色
-    rare: '#0070FF',      // 藍色
-    legendary: '#A335EE', // 紫色
-     // 可以添加更多...
-     default: '#FFFFFF'   // 預設
+// AI 設定
+const AI_PLAY_INTERVAL_MIN = 3; // 秒
+const AI_PLAY_INTERVAL_MAX = 7; // 秒
+const AI_DEFEND_HP_THRESHOLD = 0.3; // 塔血量低於30%時優先防守
+
+// 顏色定義
+const COLOR_PLAYER = [50, 150, 255];
+const COLOR_AI = [255, 100, 100];
+const COLOR_GROUND_UNIT = [100, 100, 100];
+const COLOR_AIR_UNIT = [180, 180, 200];
+const COLOR_BUILDING = [150, 100, 50];
+const COLOR_SPELL_EFFECT = [200, 50, 200, 150]; // RGBA
+
+const PARTICLE_LIMIT = 200; // 最大粒子數量
+
+// --- 資料結構 ---
+
+// 卡牌資料庫
+// 額外添加的欄位:
+//   movementType: "ground" | "air" (部隊移動類型)
+//   targetType: "any" | "ground" | "air" | "buildings" (攻擊目標類型)
+//   spawnCount: N (若為召喚單位，一次召喚的數量)
+//   spawnUnitId: ID (若為召喚單位，召喚的單位ID - 這裡簡化，假設召喚的是基礎骷髏兵等)
+//   splashRadius: N (範圍傷害半徑，0為單體)
+//   special: "" (特殊能力標記，例如 "charge", "spawn_on_death", "ramping_damage")
+const CARD_POOL = [
+  { id: 1, name: "巨人 Giant", type: "troop", elixir: 5, rarity: "rare", hp: 3400, dmg: 200, speed: "medium", attackRange: 1.5 * TILE_SIZE, description: "高血量，專攻建築", movementType: "ground", targetType: "buildings", splashRadius: 0 },
+  { id: 2, name: "皇家巨人 Royal Giant", type: "troop", elixir: 6, rarity: "common", hp: 2500, dmg: 150, speed: "slow", attackRange: 6.5 * TILE_SIZE, description: "遠程坦克，直射塔", movementType: "ground", targetType: "buildings", splashRadius: 0 },
+  { id: 3, name: "小皮卡 Mini P.E.K.K.A", type: "troop", elixir: 4, rarity: "rare", hp: 1100, dmg: 600, speed: "fast", attackRange: 1.2 * TILE_SIZE, description: "高單體傷害", movementType: "ground", targetType: "any", splashRadius: 0 },
+  { id: 4, name: "骷髏軍團 Skeleton Army", type: "troop", elixir: 3, rarity: "epic", hp: 0, dmg: 0, speed: "medium", attackRange: 0, description: "大量 1 費骷髏群", movementType: "ground", targetType: "any", spawnCount: 15, spawnUnitId: "skeleton_basic", splashRadius: 0 }, // hp/dmg 0 as it's a spawner
+  { id: 5, name: "王子 Prince", type: "troop", elixir: 5, rarity: "epic", hp: 1500, dmg: 350, speed: "medium", attackRange: 1.6 * TILE_SIZE, description: "蓄力衝刺雙倍傷害", movementType: "ground", targetType: "any", splashRadius: 0, special: "charge" },
+  { id: 6, name: "飛龍寶寶 Baby Dragon", type: "troop", elixir: 4, rarity: "epic", hp: 1000, dmg: 130, speed: "medium", attackRange: 3.5 * TILE_SIZE, description: "空中範圍傷", movementType: "air", targetType: "any", splashRadius: 1.5 * TILE_SIZE },
+  { id: 7, name: "女武神 Valkyrie", type: "troop", elixir: 4, rarity: "rare", hp: 1600, dmg: 220, speed: "medium", attackRange: 1.2 * TILE_SIZE, description: "360° 迴旋 AOE", movementType: "ground", targetType: "ground", splashRadius: 1.2 * TILE_SIZE, special: "spin_attack" },
+  { id: 8, name: "火球 Fireball", type: "spell", elixir: 4, rarity: "rare", hp: 0, dmg: 570, speed: "n/a", attackRange: 2.5 * TILE_SIZE, description: "中費範圍法術", movementType: "n/a", targetType: "any", splashRadius: 2.5 * TILE_SIZE },
+  { id: 9, name: "滾木 The Log", type: "spell", elixir: 2, rarity: "legendary", hp: 0, dmg: 240, speed: "n/a", attackRange: 10 * TILE_SIZE, description: "地面直線滾動", movementType: "n/a", targetType: "ground", splashRadius: 3.0 * TILE_SIZE, special: "linear_pushback" }, // attackRange here is length
+  { id: 10, name: "箭雨 Arrows", type: "spell", elixir: 3, rarity: "common", hp: 0, dmg: 240, speed: "n/a", attackRange: 4 * TILE_SIZE, description: "大範圍群傷", movementType: "n/a", targetType: "any", splashRadius: 4 * TILE_SIZE },
+  { id: 11, name: "雷擊 Lightning", type: "spell", elixir: 6, rarity: "epic", hp: 0, dmg: 860, speed: "n/a", attackRange: 3.5 * TILE_SIZE, description: "選 3 目標高傷", movementType: "n/a", targetType: "any", splashRadius: 0, special: "multi_target_3" }, // attackRange is selection radius
+  { id: 12, name: "火塔 Inferno Tower", type: "building", elixir: 5, rarity: "rare", hp: 1500, dmg: 50, speed: "n/a", attackRange: 6 * TILE_SIZE, description: "遞增傷坦克殺手", movementType: "n/a", targetType: "any", splashRadius: 0, special: "ramping_damage" },
+  { id: 13, name: "加農砲 Cannon", type: "building", elixir: 3, rarity: "common", hp: 800, dmg: 130, speed: "n/a", attackRange: 5.5 * TILE_SIZE, description: "低費防坦建築", movementType: "n/a", targetType: "ground", splashRadius: 0 },
+  { id: 14, name: "特斯拉 Tesla", type: "building", elixir: 4, rarity: "common", hp: 1000, dmg: 190, speed: "n/a", attackRange: 5.5 * TILE_SIZE, description: "潛地反空陸", movementType: "n/a", targetType: "any", splashRadius: 0, special: "hide_until_attack" },
+  { id: 15, name: "墓園 Graveyard", type: "spell", elixir: 5, rarity: "legendary", hp: 0, dmg: 0, speed: "n/a", attackRange: 3.5 * TILE_SIZE, description: "在敵塔隨機生成骷髏", movementType: "n/a", targetType: "ground", spawnCount: 1, spawnUnitId: "skeleton_basic", special: "area_spawn_over_time" }, // attackRange is spell radius
+  { id: 16, name: "冰凍 Freeze", type: "spell", elixir: 4, rarity: "epic", hp: 0, dmg: 100, speed: "n/a", attackRange: 3 * TILE_SIZE, description: "定身並傷害", movementType: "n/a", targetType: "any", splashRadius: 3 * TILE_SIZE, special: "freeze" },
+  { id: 17, name: "女巫 Witch", type: "troop", elixir: 5, rarity: "epic", hp: 700, dmg: 110, speed: "medium", attackRange: 5 * TILE_SIZE, description: "召骷髏＋AOE", movementType: "ground", targetType: "any", splashRadius: 0.5 * TILE_SIZE, special: "spawn_skeletons_periodically" },
+  { id: 18, name: "弓箭手 Archers", type: "troop", elixir: 3, rarity: "common", hp: 250, dmg: 90, speed: "medium", attackRange: 5 * TILE_SIZE, description: "雙遠程輕單位", movementType: "ground", targetType: "any", spawnCount: 2, spawnUnitId: "archer_single", splashRadius: 0 }, // spawn 2 archers
+  { id: 19, name: "騎士 Knight", type: "troop", elixir: 3, rarity: "common", hp: 1400, dmg: 160, speed: "medium", attackRange: 1.2 * TILE_SIZE, description: "中費平衡坦", movementType: "ground", targetType: "any", splashRadius: 0 },
+  { id: 20, name: "猴子 Bandit", type: "troop", elixir: 3, rarity: "legendary", hp: 750, dmg: 160, speed: "fast", attackRange: 0.8 * TILE_SIZE, description: "瞬移衝刺", movementType: "ground", targetType: "ground", splashRadius: 0, special: "dash_attack" }, // attackRange is melee, dash range is separate
+  { id: 21, name: "電法 Electro Wizard", type: "troop", elixir: 4, rarity: "legendary", hp: 600, dmg: 100, speed: "fast", attackRange: 5 * TILE_SIZE, description: "降低攻速暈眩", movementType: "ground", targetType: "any", splashRadius: 0, special: "stun_split_attack" }, // Hits 2 targets
+  { id: 22, name: "精靈 Spirit", type: "troop", elixir: 1, rarity: "common", hp: 190, dmg: 150, speed: "very fast", attackRange: 2.5 * TILE_SIZE, description: "消耗循環", movementType: "ground", targetType: "any", splashRadius: 1.5 * TILE_SIZE, special: "kamikaze" }, // Usually kamikaze
+  { id: 23, name: "加農車 Cannon Cart", type: "troop", elixir: 5, rarity: "epic", hp: 700, dmg: 200, speed: "medium", attackRange: 5.5 * TILE_SIZE, description: "破盾後變建築", movementType: "ground", targetType: "ground", splashRadius: 0, special: "shield_to_building" }, // HP is shield, then becomes building
+  { id: 24, name: "X 砲 X-Bow", type: "building", elixir: 6, rarity: "epic", hp: 1300, dmg: 40, speed: "n/a", attackRange: 11.5 * TILE_SIZE, description: "長射程火力", movementType: "n/a", targetType: "ground", splashRadius: 0, special: "fast_attack_rate" },
+  { id: 25, name: "氣球 Balloon", type: "troop", elixir: 5, rarity: "epic", hp: 1300, dmg: 700, speed: "medium", attackRange: 1.2 * TILE_SIZE, description: "空坦克，死亡爆炸", movementType: "air", targetType: "buildings", splashRadius: 0, special: "death_damage" }, // attackRange is melee, death_damage has radius
+  { id: 26, name: "女弓 Queen", type: "troop", elixir: 5, rarity: "legendary", hp: 1000, dmg: 200, speed: "medium", attackRange: 5 * TILE_SIZE, description: "隱身技能", movementType: "ground", targetType: "any", splashRadius: 0, special: "invisibility_skill" }, // Archer Queen inspired
+  { id: 27, name: "鏡像 Mirror", type: "spell", elixir: "+1", rarity: "epic", hp: 0, dmg: 0, speed: "n/a", attackRange: 0, description: "重複上一張", movementType: "n/a", targetType: "n/a", special: "mirror_last_card" },
+  { id: 28, name: "骷髏守衛 Guards", type: "troop", elixir: 3, rarity: "epic", hp: 80, dmg: 80, speed: "fast", attackRange: 1.2 * TILE_SIZE, description: "盾牌骷髏", movementType: "ground", targetType: "any", spawnCount: 3, spawnUnitId: "guard_skeleton", splashRadius: 0 }, // HP is shield HP, then unit HP
+  { id: 29, name: "黃金騎士 Golden Knight", type: "troop", elixir: 4, rarity: "legendary", hp: 1200, dmg: 180, speed: "medium", attackRange: 1.2 * TILE_SIZE, description: "連鎖衝", movementType: "ground", targetType: "ground", splashRadius: 0, special: "chain_dash" },
+  { id: 30, name: "鑽地礦工 Miner", type: "troop", elixir: 3, rarity: "legendary", hp: 1000, dmg: 130, speed: "fast", attackRange: 1.2 * TILE_SIZE, description: "任意生成地底", movementType: "ground", targetType: "any", splashRadius: 0, special: "deploy_anywhere_ground" },
+];
+
+// 為了簡化，定義一些基礎單位類型，給召喚類卡牌使用
+const UNIT_TEMPLATES = {
+  skeleton_basic: { name: "Skeleton", hp: 67, dmg: 67, speed: "fast", attackRange: 1.2 * TILE_SIZE, movementType: "ground", targetType: "any", splashRadius: 0, visual: { size: 15, color: [200,200,200] } },
+  archer_single: { name: "Archer", hp: 250, dmg: 90, speed: "medium", attackRange: 5 * TILE_SIZE, movementType: "ground", targetType: "any", splashRadius: 0, visual: { size: 20, color: [255,100,200] } },
+  guard_skeleton: { name: "Guard Skeleton", hp: 80, shieldHp: 199, dmg: 80, speed: "fast", attackRange: 1.2 * TILE_SIZE, movementType: "ground", targetType: "any", splashRadius: 0, visual: { size: 18, color: [180,180,220] } },
 };
 
 
-// =============================================
-// FILE: utils.js
-// =============================================
-console.log("Loading: utils.js");
-function distSq(x1, y1, x2, y2) {
-    let dx = x1 - x2;
-    let dy = y1 - y2;
-    return dx * dx + dy * dy;
-}
-
-function lerpVector(startVec, endVec, amount) {
-    let x = lerp(startVec.x, endVec.x, amount);
-    let y = lerp(startVec.y, endVec.y, amount);
-    return createVector(x, y);
-}
-
-function randomFromArray(arr) {
-    if (!arr || arr.length === 0) return null;
-    return arr[floor(random(arr.length))];
-}
-
-// --- 新增：簡單的繪圖輔助 ---
-// (這些也可以放在各自的類別中)
-function drawHealthBar(currentHp, maxHp, x, y, w, h, bgColor = color(50,0,0,180), hpColor = color(255,0,0,220)) {
-    push();
-    rectMode(CORNER);
-    fill(bgColor);
-    rect(x, y, w, h, 3); // 圓角
-    fill(hpColor);
-    const hpRatio = constrain(currentHp / maxHp, 0, 1);
-    if (hpRatio > 0) {
-        rect(x, y, w * hpRatio, h, 3);
-    }
-    pop();
-}
-
-// 獲取稀有度對應的 p5 color 物件
-function getRarityP5Color(rarity) {
-    const hex = RarityColors[rarity] || RarityColors.default;
-    // Make sure color function is available (might not be during initial script load)
-    if (typeof color === 'function') {
-        return color(hex);
-    } else {
-        // Fallback or placeholder if color() isn't ready yet
-        // This might happen if called very early before p5 fully initializes
-        // For combining files, this should generally be okay as setup() runs later.
-        console.warn("Attempted to use getRarityP5Color before p5 'color' function was ready. Returning white.");
-        return { // Return a placeholder object mimicking p5.Color structure
-            levels: [255, 255, 255, 255],
-            toString: () => '#FFFFFF',
-            setRed: function(r) { this.levels[0] = r; },
-            setGreen: function(g) { this.levels[1] = g; },
-            setBlue: function(b) { this.levels[2] = b; },
-            setAlpha: function(a) { this.levels[3] = a; }
-        };
-    }
-}
-
-
-// =============================================
-// FILE: item.js
-// =============================================
-console.log("Loading: item.js");
-class Item {
-    constructor(itemId, quantity = 1) {
-        const data = ItemData[itemId];
-        if (!data) {
-            console.error("找不到物品 ID:", itemId);
-            // Instead of returning null, which can cause constructor issues,
-            // let's create a dummy 'error' item or throw an error.
-            // For simplicity here, we'll log and make an 'invalid' item.
-            this.id = 'invalid_item';
-            this.name = '錯誤物品';
-            this.type = 'error';
-            this.description = `找不到 ID: ${itemId}`;
-            this.icon = 'error';
-            this.stackable = false;
-            this.maxStack = 1;
-            this.quantity = 0;
-            this.rarity = 'common';
-            return; // Stop further initialization for this invalid item
-        }
-        this.id = itemId;
-        this.name = data.name;
-        this.type = data.type;
-        this.description = data.description;
-        this.icon = data.icon;
-        this.stackable = data.stackable || false;
-        this.maxStack = data.maxStack || 1;
-        this.quantity = this.stackable ? quantity : 1;
-        this.rarity = data.rarity || 'common'; // 添加 rarity
-
-        if (this.type === 'equipment') {
-            this.slot = data.slot;
-            this.stats = data.stats || {};
-        } else if (this.type === 'consumable') {
-            this.effect = data.effect || {};
-        }
-    }
-
-    addQuantity(amount) {
-        if (!this.stackable) return false;
-        this.quantity += amount;
-        if (this.quantity > this.maxStack) {
-            let overflow = this.quantity - this.maxStack;
-            this.quantity = this.maxStack;
-            return overflow;
-        }
-        return 0;
-    }
-
-    use(target) {
-        if (this.type === 'consumable' && this.quantity > 0) {
-            console.log(`${target.name} 使用了 ${this.name}`);
-            let effectApplied = false;
-            for (const effectKey in this.effect) {
-                 // Ensure target has the base stat (e.g., 'hp') and the max stat (e.g., 'maxHP')
-                 const maxStatKey = `max${effectKey.toUpperCase()}`;
-                if (target.stats.hasOwnProperty(effectKey) && target.currentStats.hasOwnProperty(maxStatKey)) {
-                     let healAmount = this.effect[effectKey];
-                     let currentVal = target.stats[effectKey];
-                     let maxVal = target.currentStats[maxStatKey]; // Use currentStats for max values
-                     let newVal = min(maxVal, currentVal + healAmount);
-                      let actualHeal = newVal - currentVal; // Calculate actual amount healed
-
-                      if(actualHeal > 0) {
-                         target.stats[effectKey] = newVal; // Apply the new value
-                         // Check if uiManager exists before using it
-                         if (typeof uiManager !== 'undefined' && uiManager) {
-                            uiManager.addFloatingText(`+${actualHeal}`, target.pos.x, target.pos.y + random(-5, 5), 'lime');
-                         } else {
-                             console.log(`Healed ${effectKey} by ${actualHeal}`); // Fallback log
-                         }
-                         effectApplied = true;
-                      }
-                } else {
-                    console.warn(`Target ${target.name} missing stat '${effectKey}' or '${maxStatKey}' for item use.`);
-                }
-            }
-             if(effectApplied){
-                  this.quantity--;
-                  // Check if playSound exists before using it
-                  if (typeof playSound === 'function') playSound('useItem');
-                  return this.quantity > 0;
-             }
-        }
-        return this.quantity > 0; // If unable to use or no effect, but quantity remains, return true
-    }
-}
-
-class DroppedItem {
-    constructor(item, x, y) {
-        if (!item || item.type === 'error') {
-             console.error("Attempted to create DroppedItem with invalid item:", item);
-             // Handle this case, maybe prevent creation or set a flag
-             this.item = null; // Mark as invalid
-             this.pos = createVector(x, y);
-             this.creationTime = millis();
-             this.lifespan = 100; // Expire quickly
-             this.invalid = true;
-             return;
-        }
-        this.item = item;
-        this.pos = createVector(x, y);
-        this.pickupRadiusSq = PlayerDefaults.pickupRadiusSq * 0.8; // 拾取判定的範圍可以比玩家定義的小一點
-        this.creationTime = millis();
-        this.lifespan = 60000; // 60 秒消失
-        this.bobbingOffset = 0; // 用於上下浮動效果
-        this.bobbingSpeed = random(0.05, 0.1);
-        this.invalid = false;
-    }
-
-    isExpired() {
-        return this.invalid || millis() - this.creationTime > this.lifespan;
-    }
-
-    render(offsetX, offsetY) {
-         if (this.invalid || !this.item) return; // Don't render invalid items
-
-        this.bobbingOffset = sin(frameCount * this.bobbingSpeed) * 3; // 計算浮動偏移
-
-        push();
-        translate(this.pos.x - offsetX, this.pos.y - offsetY + this.bobbingOffset); // 加入浮動效果
-
-        const itemSize = TILE_SIZE * 0.4;
-        const rarityColor = getRarityP5Color(this.item.rarity);
-
-        // --- 繪製稀有度光暈 ---
-        if (this.item.rarity !== 'common') {
-            let glowAlpha = map(sin(frameCount * 0.05), -1, 1, 80, 150); // 呼吸效果
-            let glowSize = itemSize * 1.8;
-            noStroke();
-            // 多層疊加模擬光暈
-             for(let i = 3; i > 0; i--){
-                  // Need to access color components safely
-                  let r = (typeof red === 'function') ? red(rarityColor) : 255;
-                  let g = (typeof green === 'function') ? green(rarityColor) : 255;
-                  let b = (typeof blue === 'function') ? blue(rarityColor) : 255;
-                  fill(r, g, b, glowAlpha / (i*1.5));
-                  ellipse(0, 0, glowSize * (1 + (3-i)*0.2) , glowSize * (1 + (3-i)*0.2));
-             }
-        }
-
-        // --- 繪製物品基礎圖示 ---
-        noStroke();
-        // 根據類型給個基礎顏色/形狀 (未來可替換為真實圖標)
-        if (this.item.type === 'equipment') {
-            fill(180, 180, 220); // 淡藍紫色代表裝備
-            rectMode(CENTER);
-            rect(0, 0, itemSize * 0.8, itemSize * 1.2, 2); // 類似裝備形狀
-        } else if (this.item.type === 'consumable') {
-             if(this.item.effect && this.item.effect.hp) fill(255, 80, 80); // 紅色代表血瓶
-             else if(this.item.effect && this.item.effect.mp) fill(80, 80, 255); // 藍色代表藍瓶
-             else fill(200, 200, 100); // 其他消耗品黃色
-            ellipse(0, 0, itemSize, itemSize); // 圓形代表藥水
-        } else {
-            fill(150); // 灰色 (材料等)
-            ellipse(0, 0, itemSize * 0.9, itemSize * 0.7); // 橢圓代表材料
-        }
-        // 加一個高光點綴
-         fill(255, 255, 255, 180);
-         ellipse(-itemSize * 0.2, -itemSize * 0.2, itemSize * 0.2);
-
-        pop();
-    }
-}
-
-
-// =============================================
-// FILE: projectile.js
-// =============================================
-console.log("Loading: projectile.js");
-class Projectile {
-    constructor(startX, startY, targetX, targetY, speed, damage, owner, type = 'arrow') {
-        this.pos = createVector(startX, startY);
-        this.vel = createVector(targetX - startX, targetY - startY);
-        // Prevent zero magnitude vector if start and target are the same
-        if (this.vel.magSq() < 0.001) {
-            this.vel.set(speed, 0); // Default to moving right if no direction
-        } else {
-            this.vel.setMag(speed);
-        }
-        this.damage = damage;
-        this.owner = owner; // 發射者 (用於避免打到自己或友軍)
-        this.type = type;
-        this.size = TILE_SIZE * 0.2;
-        this.creationTime = millis();
-        this.lifespan = 3000; // 最長存活時間 (ms)
-        this.collided = false;
-    }
-
-    update(monsters, player, npcs, obstacles) { // `obstacles` here is expected to be the map grid or the GameMap object
-        if (this.collided || millis() - this.creationTime > this.lifespan) {
-            return false; // 返回 false 表示需要被移除
-        }
-
-        this.pos.add(this.vel);
-
-        // --- 碰撞檢測 ---
-        // Make sure currentMap is accessible globally or passed in
-        const map = (typeof currentMap !== 'undefined') ? currentMap : null;
-
-        // 1. 檢查地圖障礙物或邊界
-        if (map && (map.isObstacle(this.pos.x, this.pos.y) || map.isOutsideBounds(this.pos.x, this.pos.y))) {
-            this.collided = true;
-             // if (typeof playSound === 'function') playSound('projectileHitWall'); // Optional sound
-             // 可以產生一個小的擊中效果
-             if (typeof visualEffects !== 'undefined') {
-                  let effect = { type: 'spark', pos: this.pos.copy(), color: color(180), duration: 100, startTime: millis() };
-                  visualEffects.push(effect);
-             }
-            return false;
-        }
-
-        // 2. 檢查是否擊中目標單位
-        let targetHit = null;
-        // Use a slightly larger radius for hit detection
-        const hitRadiusSq = ((this.size > 0 ? this.size : TILE_SIZE * 0.1) * 1.5)**2;
-
-        // 檢查是否擊中玩家 (Make sure player is accessible)
-        const globalPlayer = (typeof player !== 'undefined') ? player : null;
-        if (this.owner !== globalPlayer && globalPlayer && globalPlayer.stats && globalPlayer.stats.hp > 0) {
-            const playerSize = globalPlayer.size || TILE_SIZE * 0.5; // Safer access
-            if (distSq(this.pos.x, this.pos.y, globalPlayer.pos.x, globalPlayer.pos.y) < hitRadiusSq + (playerSize/2)**2) {
-                targetHit = globalPlayer;
-            }
-        }
-
-        // 檢查是否擊中怪物 (Make sure monsters is accessible)
-        const globalMonsters = (typeof monsters !== 'undefined') ? monsters : [];
-         if (!targetHit && !(this.owner instanceof Monster)) { // Check owner type correctly
-            for (let monster of globalMonsters) {
-                 if (monster !== this.owner && monster.state !== 'dead' && monster.stats && monster.stats.hp > 0) { // Extra checks for safety
-                      const monsterSize = monster.size || TILE_SIZE * 0.5;
-                     if (distSq(this.pos.x, this.pos.y, monster.pos.x, monster.pos.y) < hitRadiusSq + (monsterSize/2)**2) {
-                         targetHit = monster;
-                         break;
-                     }
-                 }
-            }
-         }
-
-         // 檢查是否擊中 NPC (Make sure npcs is accessible)
-         const globalNpcs = (typeof npcs !== 'undefined') ? npcs : [];
-         if (!targetHit && !(this.owner instanceof Npc)) { // Check owner type correctly
-             for (let npc of globalNpcs) {
-                  if (npc !== this.owner && npc.state !== 'dead' && npc.stats && npc.stats.hp > 0) { // Extra checks
-                       const npcSize = npc.size || TILE_SIZE * 0.5;
-                       if (distSq(this.pos.x, this.pos.y, npc.pos.x, npc.pos.y) < hitRadiusSq + (npcSize/2)**2) {
-                           targetHit = npc;
-                           break;
-                       }
-                  }
-             }
-         }
-
-
-        if (targetHit) {
-            // console.log(`投射物擊中了 ${targetHit.name}`);
-            if (typeof targetHit.takeDamage === 'function') {
-                 targetHit.takeDamage(this.damage, this.owner);
-            } else {
-                 console.error("Target hit has no takeDamage method:", targetHit);
-            }
-            this.collided = true;
-             // if (typeof playSound === 'function') playSound('projectileHitTarget');
-            return false; // 擊中目標後消失
-        }
-
-        return true; // 繼續存在
-    }
-
-    render(offsetX, offsetY) {
-        push();
-        translate(this.pos.x - offsetX, this.pos.y - offsetY);
-        rotate(this.vel.heading()); // 指向移動方向
-
-        if (this.type === 'arrow') {
-            fill(139, 69, 19); // 棕色箭桿
-            stroke(200);
-            strokeWeight(1);
-            line(-this.size * 1.5, 0, this.size * 1.5, 0); // 箭桿
-            // 箭頭
-             triangle(this.size*1.5, 0, this.size*0.8, -this.size*0.5, this.size*0.8, this.size*0.5);
-            // 箭羽
-             line(-this.size*1.0, -this.size*0.4, -this.size*1.5, 0);
-             line(-this.size*1.0, this.size*0.4, -this.size*1.5, 0);
-
-        } else {
-            // 其他類型的投射物 (例如魔法彈)
-            fill(255, 0, 255, 200); // 紫色魔法彈
-            noStroke();
-            ellipse(0, 0, this.size * 2, this.size * 2);
-        }
-
-        pop();
-    }
-}
-
-
-// =============================================
-// FILE: map.js
-// =============================================
-console.log("Loading: map.js");
-class GameMap {
-    constructor(width, height, isVillage = false) {
-        this.width = width;
-        this.height = height;
-        this.isVillage = isVillage;
-        this.grid = [];
-        this.mapWidthPixels = this.width * TILE_SIZE;
-        this.mapHeightPixels = this.height * TILE_SIZE;
-
-        this.spawnPoints = [];
-        this.exitPoint = null;
-        this.entryPoint = null;
-
-        this.generateMap();
-    }
-
-    generateMap() {
-        // Ensure p5 functions are available or use alternatives if needed early
-        if (typeof noiseSeed === 'function') noiseSeed(millis()); // Use p5's millis() for seed
-        else console.warn("noiseSeed function not available during map generation.");
-
-        for (let y = 0; y < this.height; y++) {
-            this.grid[y] = [];
-            for (let x = 0; x < this.width; x++) {
-                this.grid[y][x] = this.isVillage ? 1 : 3; // 村莊預設牆，野外預設水 (待挖掘)
-            }
-        }
-
-        if (this.isVillage) {
-            this.generateVillageLayout();
-        } else {
-            this.generateWildernessLayout();
-        }
-    }
-
-    generateVillageLayout() {
-        // Using floor, random - assumes p5 global scope or alternatives provided
-        let drunkX = floor(this.width / 2);
-        let drunkY = floor(this.height / 2);
-        let steps = floor(this.width * this.height * 0.6); // 挖掘更多空間
-         let floorTile = 0; // 地板
-
-         // 確保邊界是牆
-         for(let y=0; y<this.height; ++y){
-              for(let x=0; x<this.width; ++x){
-                   if(x==0 || x==this.width-1 || y==0 || y==this.height-1) this.grid[y][x]=1;
-                   else this.grid[y][x]=1; // 內部也先填滿牆
-              }
-         }
-
-         // 開始挖掘 - Ensure grid access is safe
-         if (this.grid[drunkY]) this.grid[drunkY][drunkX] = floorTile;
-
-         let wallThickness = MapSettings.wallThickness; // 至少保留的外牆厚度
-
-         for (let i = 0; i < steps; i++) {
-             let dir = floor(random(4));
-             let nx = drunkX, ny = drunkY;
-             switch (dir) {
-                 case 0: ny = max(wallThickness, drunkY - 1); break; // using max - p5 global assumed
-                 case 1: nx = min(this.width - 1 - wallThickness, drunkX + 1); break; // using min - p5 global assumed
-                 case 2: ny = min(this.height - 1 - wallThickness, drunkY + 1); break;
-                 case 3: nx = max(wallThickness, drunkX - 1); break;
-             }
-              // 確保在有效範圍內挖掘
-              if (nx >= wallThickness && nx < this.width - wallThickness && ny >= wallThickness && ny < this.height - wallThickness) {
-                   drunkX = nx;
-                   drunkY = ny;
-                   if (this.grid[drunkY]) this.grid[drunkY][drunkX] = floorTile;
-                   // 加寬通道
-                   if (random() < 0.4) { // 有機率加寬
-                       let dx = floor(random(-1, 2));
-                       let dy = floor(random(-1, 2));
-                        if(abs(dx)+abs(dy) === 1){ // 只加寬相鄰格子 - abs is p5 global assumed
-                             let wx = drunkX+dx;
-                             let wy = drunkY+dy;
-                             if (wx >= wallThickness && wx < this.width - wallThickness && wy >= wallThickness && wy < this.height - wallThickness) {
-                                  if (this.grid[wy]) this.grid[wy][wx] = floorTile;
-                             }
-                        }
-                   }
-              } else {
-                    // 如果走到邊界，跳回中心附近重新開始
-                   drunkX = floor(random(this.width * 0.4, this.width * 0.6));
-                   drunkY = floor(random(this.height * 0.4, this.height * 0.6));
-                    if(this.grid[drunkY] && this.grid[drunkY][drunkX] !== undefined) this.grid[drunkY][drunkX] = floorTile; // 確保新起點是地板
-              }
-         }
-
-
-        // 開一個出口
-         const exitSide = floor(random(4));
-         let exitX = floor(this.width / 2);
-         let exitY = floor(this.height / 2);
-         const exitWidth = 2;
-
-         // 強制打通出口路徑 (從中心挖到邊緣)
-         let pathX = floor(this.width/2);
-         let pathY = floor(this.height/2);
-
-         // Ensure createVector is available
-         const createVec = (typeof createVector === 'function') ? createVector : (x,y) => ({x:x, y:y}); // Basic fallback
-
-         if (exitSide === 0) { // 上
-              exitY = wallThickness - 1;
-              while(pathY >= exitY) { if(this.grid[pathY]) this.grid[pathY][pathX] = floorTile; if(this.grid[pathY] && this.grid[pathY][pathX+1]) this.grid[pathY][pathX+1] = floorTile; pathY--; }
-              for(let i = 0; i < exitWidth; i++) if(this.grid[exitY] && this.grid[exitY][pathX+i]) this.grid[exitY][pathX+i] = 2;
-              this.exitPoint = createVec((pathX + exitWidth/2) * TILE_SIZE, (exitY - 0.5) * TILE_SIZE);
-              this.entryPoint = createVec((pathX + exitWidth/2) * TILE_SIZE, (exitY + 1.5) * TILE_SIZE);
-         } else if (exitSide === 1) { // 右
-              exitX = this.width - wallThickness;
-              while(pathX <= exitX) { if(this.grid[pathY]) this.grid[pathY][pathX] = floorTile; if(this.grid[pathY+1] && this.grid[pathY+1][pathX]) this.grid[pathY+1][pathX] = floorTile; pathX++; }
-               for(let i = 0; i < exitWidth; i++) if(this.grid[pathY+i] && this.grid[pathY+i][exitX]) this.grid[pathY+i][exitX] = 2;
-               this.exitPoint = createVec((exitX + 0.5) * TILE_SIZE, (pathY + exitWidth/2) * TILE_SIZE);
-               this.entryPoint = createVec((exitX - 1.5) * TILE_SIZE, (pathY + exitWidth/2) * TILE_SIZE);
-         } else if (exitSide === 2) { // 下
-              exitY = this.height - wallThickness;
-              while(pathY <= exitY) { if(this.grid[pathY]) this.grid[pathY][pathX] = floorTile; if(this.grid[pathY] && this.grid[pathY][pathX+1]) this.grid[pathY][pathX+1] = floorTile; pathY++; }
-               for(let i = 0; i < exitWidth; i++) if(this.grid[exitY] && this.grid[exitY][pathX+i]) this.grid[exitY][pathX+i] = 2;
-               this.exitPoint = createVec((pathX + exitWidth/2) * TILE_SIZE, (exitY + 0.5) * TILE_SIZE);
-               this.entryPoint = createVec((pathX + exitWidth/2) * TILE_SIZE, (exitY - 1.5) * TILE_SIZE);
-         } else { // 左
-              exitX = wallThickness - 1;
-              while(pathX >= exitX) { if(this.grid[pathY]) this.grid[pathY][pathX] = floorTile; if(this.grid[pathY+1] && this.grid[pathY+1][pathX]) this.grid[pathY+1][pathX] = floorTile; pathX--; }
-               for(let i = 0; i < exitWidth; i++) if(this.grid[pathY+i] && this.grid[pathY+i][exitX]) this.grid[pathY+i][exitX] = 2;
-               this.exitPoint = createVec((exitX - 0.5) * TILE_SIZE, (pathY + exitWidth/2) * TILE_SIZE);
-               this.entryPoint = createVec((exitX + 1.5) * TILE_SIZE, (pathY + exitWidth/2) * TILE_SIZE);
-         }
-
-         // Ensure entry/exit points are valid if creation failed
-         this.exitPoint = this.exitPoint || createVec(this.mapWidthPixels/2, this.mapHeightPixels/2);
-         this.entryPoint = this.entryPoint || createVec(this.mapWidthPixels/2, this.mapHeightPixels/2);
-
-        // 放置一些裝飾性障礙物 (房子等)
-        for (let i = 0; i < 7; i++) {
-             let houseX = floor(random(wallThickness + 1, this.width - wallThickness - 2));
-             let houseY = floor(random(wallThickness + 1, this.height - wallThickness - 2));
-              // Ensure grid access and distSq are safe
-             if (this.grid[houseY] && this.grid[houseY][houseX] === floorTile &&
-                  this.entryPoint && this.exitPoint && // Check points exist
-                 distSq(houseX * TILE_SIZE, houseY*TILE_SIZE, this.entryPoint.x, this.entryPoint.y) > (TILE_SIZE * 4)**2 &&
-                  distSq(houseX * TILE_SIZE, houseY*TILE_SIZE, this.exitPoint.x, this.exitPoint.y) > (TILE_SIZE * 4)**2 )
-             {
-                  this.grid[houseY][houseX] = 1; // 房子用牆表示
-                  if (this.grid[houseY+1] && this.grid[houseY+1][houseX] === floorTile && random()<0.7) this.grid[houseY+1][houseX] = 1; // 隨機擴展
-                   if (this.grid[houseY][houseX+1] && this.grid[houseY][houseX+1] === floorTile && random()<0.7) this.grid[houseY][houseX+1] = 1;
-             }
-        }
-
-        // 設定 NPC 出生點 (在可通行的地板上隨機找點)
-        this.spawnPoints = [];
-        let npcAttempts = 20;
-         while(this.spawnPoints.length < 5 && npcAttempts > 0){
-              let sx = floor(random(wallThickness, this.width - wallThickness));
-              let sy = floor(random(wallThickness, this.height - wallThickness));
-               // Ensure grid access and entryPoint are safe
-              if(this.grid[sy] && this.grid[sy][sx] === floorTile && this.entryPoint && distSq(sx*TILE_SIZE, sy*TILE_SIZE, this.entryPoint.x, this.entryPoint.y) > (TILE_SIZE*3)**2){
-                   this.spawnPoints.push(createVec((sx + 0.5) * TILE_SIZE, (sy + 0.5) * TILE_SIZE));
-              }
-              npcAttempts--;
-         }
-         // 確保至少有一個出生點靠近入口 (例如衛兵)
-         if (this.entryPoint) { // Ensure entryPoint exists before using it
-              this.spawnPoints.push(createVec(this.entryPoint.x + TILE_SIZE, this.entryPoint.y));
-         } else { // Fallback if entryPoint is somehow null
-              this.spawnPoints.push(createVec((floor(this.width/2) + 1) * TILE_SIZE, (floor(this.height/2) + 1) * TILE_SIZE));
-         }
-    }
-
-    generateWildernessLayout() {
-         // Ensure p5 noise functions are available
-         if (typeof noiseDetail === 'function') noiseDetail(5, 0.55);
-         else console.warn("noiseDetail function not available during map generation.");
-
-         const waterLevel = 0.38;
-         const mountainLevel = 0.68;
-         const noiseFn = (typeof noise === 'function') ? noise : (x,y) => random(); // Fallback noise
-
-         for (let y = 0; y < this.height; y++) {
-             for (let x = 0; x < this.width; x++) {
-                 let n = noiseFn(x * MapSettings.noiseScale, y * MapSettings.noiseScale);
-                 let n2 = noiseFn(x * MapSettings.noiseScale * 2 + 100, y * MapSettings.noiseScale * 2 + 100); // 第二層噪聲增加細節
-
-                  let finalN = (n * 0.7 + n2 * 0.3); // 混合噪聲
-
-                 if (finalN < waterLevel) {
-                     this.grid[y][x] = 3; // 水域
-                 } else if (finalN > mountainLevel || x < 1 || x > this.width - 2 || y < 1 || y > this.height - 2) { // 山脈或邊界
-                     this.grid[y][x] = 1; // 牆壁/山
-                 } else {
-                     this.grid[y][x] = 0; // 草地/泥地
-                 }
-             }
-         }
-
-        // Drunkard's Walk 保證連通性並創建主要路徑
-        let drunkX = floor(this.width / 2);
-        let drunkY = floor(this.height / 2);
-        let steps = floor(this.width * this.height * 0.4);
-        if (this.grid[drunkY]) this.grid[drunkY][drunkX] = 0; // Safe access
-
-        for (let i = 0; i < steps; i++) {
-            let dir = floor(random(4));
-            let nx = drunkX, ny = drunkY;
-             switch (dir) {
-                 case 0: ny = max(1, drunkY - 1); break;
-                 case 1: nx = min(this.width - 2, drunkX + 1); break;
-                 case 2: ny = min(this.height - 2, drunkY + 1); break;
-                 case 3: nx = max(1, drunkX - 1); break;
-             }
-              drunkX = nx; drunkY = ny;
-              if (this.grid[drunkY] && this.grid[drunkY][drunkX] !== undefined) {
-                  this.grid[drunkY][drunkX] = 0; // 挖掘
-                  // 加寬
-                   if (random() < 0.5) {
-                       let dx = floor(random(-1, 2)); let dy = floor(random(-1, 2));
-                       if(abs(dx)+abs(dy) === 1){
-                            let wx = drunkX+dx; let wy = drunkY+dy;
-                             // Safe grid access and type check
-                             if(wx > 0 && wx < this.width-1 && wy > 0 && wy < this.height-1 && this.grid[wy] && this.grid[wy][wx] !== 3){ // 不挖穿水域
-                                  this.grid[wy][wx] = 0;
-                             }
-                       }
-                   }
-              } else {
-                   drunkX = floor(random(this.width*0.4, this.width*0.6));
-                   drunkY = floor(random(this.height*0.4, this.height*0.6));
-                   if(this.grid[drunkY] && this.grid[drunkY][drunkX] !== undefined) this.grid[drunkY][drunkX] = 0;
-              }
-        }
-
-        // Ensure createVector is available
-        const createVec = (typeof createVector === 'function') ? createVector : (x,y) => ({x:x, y:y});
-
-        // 設定野外入口點 (對應村莊出口 - 需全局協調, 這裡仍用近似)
-        // 嘗試在靠近地圖中心下方找一個可通行的點
-        let entryX = floor(this.width / 2);
-        let entryY = floor(this.height * 0.8); // 靠近底部邊緣
-         let attempts = 20;
-         // Safer grid checking loop
-         while(attempts > 0 && (
-                 !this.grid[entryY] || this.grid[entryY][entryX] !== 0 ||
-                 !this.grid[entryY+1] || this.grid[entryY+1][entryX] !== 0
-             )) {
-             entryY--;
-              if (entryY <= 1) { entryY = floor(this.height/2); break;} // 防止找不到卡死
-              attempts--;
-         }
-         // If still not found, force it (safer access)
-         if (!this.grid[entryY] || this.grid[entryY][entryX] !== 0) {
-              entryY = floor(this.height / 2) + 5;
-              entryX = floor(this.width/2);
-              if (entryY >= this.height) entryY = this.height - 2; // Ensure within bounds
-              if (entryY < 0) entryY = 1;
-              if (this.grid[entryY]) this.grid[entryY][entryX] = 0;
-              if(this.grid[entryY+1]) this.grid[entryY+1][entryX] = 0;
-         }
-
-        this.entryPoint = createVec((entryX + 0.5) * TILE_SIZE, (entryY + 0.5) * TILE_SIZE);
-        this.exitPoint = this.entryPoint; // 出口即入口
-        if(this.grid[entryY]) this.grid[entryY][entryX-1] = 4; // 特殊標記：返回村莊的入口
-         // 稍微清理入口周圍的障礙物 (safer access)
-         for(let dy = -1; dy <= 1; dy++){
-              for(let dx = -1; dx <= 1; dx++){
-                   let checkY = entryY + dy;
-                   let checkX = entryX + dx;
-                   if(this.grid[checkY] && this.grid[checkY][checkX] === 1){
-                        this.grid[checkY][checkX] = 0;
-                   }
-              }
-         }
-
-        // 設定怪物出生點
-        this.spawnPoints = [];
-        let spawnAttempts = MapSettings.maxMonsters * 5;
-        // Ensure entryPoint exists before using in distance check
-        const entryCheckX = this.entryPoint ? this.entryPoint.x : -1000;
-        const entryCheckY = this.entryPoint ? this.entryPoint.y : -1000;
-
-        while (this.spawnPoints.length < MapSettings.maxMonsters * 1.5 && spawnAttempts > 0) {
-            let sx = floor(random(1, this.width-1));
-            let sy = floor(random(1, this.height-1));
-            // Safer grid access and distance check
-            if (this.grid[sy] && this.grid[sy][sx] === 0 &&
-                distSq(sx * TILE_SIZE, sy * TILE_SIZE, entryCheckX, entryCheckY) > (MapSettings.monsterSpawnCheckRadius * 0.8)**2)
-            {
-                this.spawnPoints.push(createVec((sx + 0.5) * TILE_SIZE, (sy + 0.5) * TILE_SIZE));
-            }
-            spawnAttempts--;
-        }
-    }
-
-
-    getTileType(pixelX, pixelY) {
-        let gridX = floor(pixelX / TILE_SIZE);
-        let gridY = floor(pixelY / TILE_SIZE);
-        if (this.grid[gridY] && gridY >= 0 && gridY < this.height && gridX >= 0 && gridX < this.width) {
-            return this.grid[gridY][gridX];
-        } return -1; // Return -1 for out of bounds or invalid access
-    }
-
-    isObstacle(pixelX, pixelY) {
-        let tileType = this.getTileType(pixelX, pixelY);
-        return tileType === 1 || tileType === 3; // 牆和水是障礙
-    }
-
-     isOutsideBounds(pixelX, pixelY) {
-         return pixelX < 0 || pixelX >= this.mapWidthPixels || pixelY < 0 || pixelY >= this.mapHeightPixels;
-     }
-
-     isOnExit(pixelX, pixelY) {
-         if (!this.exitPoint) return false;
-         const exitRadiusSq = (TILE_SIZE * 1.2)**2; // 範圍稍大
-         return distSq(pixelX, pixelY, this.exitPoint.x, this.exitPoint.y) < exitRadiusSq;
-     }
-
-     isOnVillageEntrance(pixelX, pixelY) {
-          if (this.isVillage) return false;
-          let gridX = floor(pixelX / TILE_SIZE);
-          let gridY = floor(pixelY / TILE_SIZE);
-           if (this.grid[gridY] && gridY >= 0 && gridY < this.height && gridX >= 0 && gridX < this.width) {
-               return this.grid[gridY][gridX] === 4;
-           } return false;
-     }
-
-    getRandomSpawnPoint(referencePos = null, minDistanceSq = 0) {
-         if (this.spawnPoints.length === 0) return null;
-
-         let validPoints = this.spawnPoints;
-         if (referencePos && minDistanceSq > 0) {
-             validPoints = this.spawnPoints.filter(pt => pt && distSq(pt.x, pt.y, referencePos.x, referencePos.y) > minDistanceSq);
-         }
-
-         if (validPoints.length === 0) return randomFromArray(this.spawnPoints.filter(pt => pt)); // Filter nulls before random choice
-         return randomFromArray(validPoints);
-    }
-
-
-    render(offsetX, offsetY, screenWidth, screenHeight) {
-        // Ensure p5 drawing functions are available
-        if (typeof push !== 'function' || typeof pop !== 'function' || typeof translate !== 'function' || typeof fill !== 'function' || typeof rect !== 'function' || typeof noStroke !== 'function' || typeof ellipse !== 'function' || typeof sin !== 'function' || typeof noise !== 'function' || typeof color !== 'function' || typeof frameCount === 'undefined') {
-            console.error("p5 drawing functions not ready for map rendering.");
-            return;
-        }
-
-        let startX = floor(offsetX / TILE_SIZE);
-        let startY = floor(offsetY / TILE_SIZE);
-        let endX = ceil((offsetX + screenWidth) / TILE_SIZE); // ceil ensures covering edge tiles
-        let endY = ceil((offsetY + screenHeight) / TILE_SIZE);
-
-        startX = max(0, startX); startY = max(0, startY);
-        endX = min(this.width, endX); endY = min(this.height, endY); // Use p5.min/max
-
-        push();
-        translate(-offsetX, -offsetY);
-        rectMode(CORNER);
-        noStroke();
-
-        for (let y = startY; y < endY; y++) {
-             if (!this.grid[y]) continue; // Skip if row doesn't exist
-            for (let x = startX; x < endX; x++) {
-                let tileType = this.grid[y][x];
-                 if (tileType === undefined) continue; // Skip if tile doesn't exist
-
-                let tileX = x * TILE_SIZE;
-                let tileY = y * TILE_SIZE;
-                let tileColor;
-                 let noiseVal = noise(x * 0.1, y * 0.1) * 50 - 25; // Calculate noise once
-
-                switch (tileType) {
-                    case 0: // 地板
-                        let baseCol = this.isVillage ? color(160, 130, 100) : color(50, 100, 50);
-                         tileColor = color(red(baseCol)+noiseVal, green(baseCol)+noiseVal, blue(baseCol)+noiseVal);
-                         fill(tileColor);
-                         rect(tileX, tileY, TILE_SIZE+1, TILE_SIZE+1); // Overdraw slightly to avoid gaps
-                        break;
-                    case 1: // 牆壁/山脈
-                        let wallCol = this.isVillage ? color(100, 70, 40) : color(90, 90, 90);
-                         let nWall = noise(x * 0.1 + 10, y * 0.1 + 10) * 30 - 15;
-                         tileColor = color(red(wallCol)+nWall, green(wallCol)+nWall, blue(wallCol)+nWall);
-                         fill(tileColor);
-                         rect(tileX, tileY, TILE_SIZE+1, TILE_SIZE+1);
-                          // 簡單的陰影效果
-                         fill(0, 0, 0, 50);
-                         rect(tileX, tileY + TILE_SIZE * 0.7, TILE_SIZE+1, TILE_SIZE * 0.3);
-                         rect(tileX + TILE_SIZE * 0.7, tileY, TILE_SIZE * 0.3, TILE_SIZE * 0.7);
-                        break;
-                    case 2: // 村莊出口
-                         let exitFloorCol = color(160, 130, 100);
-                         fill(red(exitFloorCol)+noiseVal, green(exitFloorCol)+noiseVal, blue(exitFloorCol)+noiseVal);
-                         rect(tileX, tileY, TILE_SIZE+1, TILE_SIZE+1);
-                         // 疊加標示色
-                         fill(255, 255, 0, 80 + sin(frameCount*0.1)*30); // 呼吸效果
-                         rect(tileX, tileY, TILE_SIZE, TILE_SIZE); // Exact size for overlay
-                        break;
-                    case 3: // 水域
-                         let waterBase = color(40, 80, 150);
-                          let nWater = noise(x * 0.08 + frameCount * 0.01, y * 0.08 + frameCount * 0.01) * 40 - 20; // 流動效果
-                          fill(red(waterBase)+nWater, green(waterBase)+nWater, blue(waterBase)+nWater);
-                          rect(tileX, tileY, TILE_SIZE+1, TILE_SIZE+1);
-                           // 水波紋 (簡單)
-                          noFill(); stroke(255, 255, 255, 30 + sin(x+frameCount*0.05)*15); strokeWeight(1);
-                          ellipse(tileX + TILE_SIZE/2, tileY + TILE_SIZE/2, TILE_SIZE*0.8, TILE_SIZE*0.4);
-                           noStroke();
-                        break;
-                    case 4: // 野外回村入口
-                         let wildFloorCol = color(50, 100, 50);
-                         fill(red(wildFloorCol)+noiseVal, green(wildFloorCol)+noiseVal, blue(wildFloorCol)+noiseVal);
-                         rect(tileX, tileY, TILE_SIZE+1, TILE_SIZE+1);
-                         // 疊加標示色
-                         fill(0, 255, 255, 80 + sin(frameCount*0.1 + PI)*30); // 青色呼吸
-                         rect(tileX, tileY, TILE_SIZE, TILE_SIZE);
-                        break;
-                    default:
-                        fill(255, 0, 255); // 紫色錯誤
-                        rect(tileX, tileY, TILE_SIZE+1, TILE_SIZE+1);
-                }
-            }
-        }
-        pop();
-    }
-}
-
-
-// =============================================
-// FILE: ui.js
-// =============================================
-console.log("Loading: ui.js");
-// --- 浮動文字類 ---
-class FloatingText {
-    constructor(text, x, y, colorVal = 'white', duration = 1000, size = 16) {
-        this.text = text;
-        this.pos = createVector(x, y);
-        this.startY = y;
-        // Handle color input being string or p5.Color
-        this.color = (typeof colorVal === 'string') ? color(colorVal) : colorVal;
-        this.duration = duration;
-        this.creationTime = millis();
-        this.alpha = 255;
-        this.speed = 1.8;
-        this.size = size;
-    }
-
-    update() {
-        const elapsed = millis() - this.creationTime;
-        if (elapsed > this.duration) {
-            return false;
-        }
-        this.pos.y -= this.speed * (1 - elapsed / this.duration); // 向上速度減緩
-        // Ensure map function is available
-        this.alpha = (typeof map === 'function') ? map(elapsed, 0, this.duration, 255, 0) : 255 * (1 - elapsed / this.duration);
-        return true;
-    }
-
-    render(offsetX, offsetY) {
-        // Ensure p5 functions are available
-        if (typeof push !== 'function') return;
-        push();
-        // Set fill color safely, handling potential alpha changes
-        let baseColor = this.color;
-        fill(red(baseColor), green(baseColor), blue(baseColor), this.alpha);
-        textSize(this.size);
-        textAlign(CENTER, BOTTOM);
-        textFont('monospace');
-         stroke(0, this.alpha); // 加黑色描邊更清晰
-         strokeWeight(1.5);
-        text(this.text, this.pos.x - offsetX, this.pos.y - offsetY);
-        pop();
-    }
-}
-
-// --- 系統訊息類 ---
-class SystemMessage {
-     constructor(text, p5color = color(255), duration = 3000){ // 接受 p5 color
-          this.text = text;
-          this.color = p5color;
-          this.duration = duration;
-          this.creationTime = millis();
-          this.alpha = 255;
-     }
-     isExpired(){ return millis() - this.creationTime > this.duration; }
-     update(){
-          const elapsed = millis() - this.creationTime;
-          const fadeTime = 500;
-          if(this.duration - elapsed < fadeTime){
-               this.alpha = (typeof map === 'function') ? map(elapsed, this.duration - fadeTime, this.duration, 255, 0) : 255 * (1 - (elapsed - (this.duration - fadeTime))/fadeTime) ;
-          } else {
-               this.alpha = 255;
-          }
-          this.alpha = constrain(this.alpha, 0, 255); // Ensure alpha stays in bounds
-     }
-     render(x, y){
-          // Ensure p5 functions are available
-          if (typeof push !== 'function') return;
-          push();
-          fill(red(this.color), green(this.color), blue(this.color), this.alpha);
-          textSize(14);
-          textAlign(LEFT, BOTTOM);
-          textFont('sans-serif');
-           // textFont('Georgia'); // 換個字體試試
-           stroke(0, this.alpha * 0.7); strokeWeight(1); // 文字陰影
-          text(this.text, x, y);
-          pop();
-     }
-}
-
-// --- UI 管理器 ---
-class UIManager {
-    constructor() {
-        this.floatingTexts = [];
-        this.systemMessages = [];
-        this.maxMessages = 6;
-
-        this.showInventory = false;
-        this.inventoryPanel = { x: 0, y: 0, w: 0, h: 0, rows: 5, cols: 4, slotSize: 45, padding: 8 }; // 調整格子大小和間距
-        this.equipmentPanel = {x: 0, y: 0, w: 0, h: 0, slotSize: 45, padding: 8}; // Ensure defaults match
-        this.tooltip = { show: false, text: "", x: 0, y: 0, w:0, h:0 }; // 加入寬高方便定位
-
-        this.calculateLayout(); // Call layout calculation
-    }
-
-     calculateLayout() {
-         // Ensure width/height are available (might be 0 during initial load)
-         const w = (typeof width !== 'undefined' && width > 0) ? width : 600; // Default fallback
-         const h = (typeof height !== 'undefined' && height > 0) ? height : 400;
-
-         const margin = 15;
-         const bottomMargin = 10;
-         const barHeight = 18;
-         this.bottomUIStartY = h - bottomMargin - barHeight * 2 - 40; // 底部 UI 起始 Y
-
-         this.inventoryPanel.cols = 4;
-         // Use PlayerDefaults safely
-         const invSize = (typeof PlayerDefaults !== 'undefined') ? PlayerDefaults.inventorySize : 20;
-         this.inventoryPanel.rows = ceil(invSize / this.inventoryPanel.cols); // 用 ceil 確保格子夠
-         this.inventoryPanel.w = this.inventoryPanel.cols * (this.inventoryPanel.slotSize + this.inventoryPanel.padding) + this.inventoryPanel.padding;
-         this.inventoryPanel.h = this.inventoryPanel.rows * (this.inventoryPanel.slotSize + this.inventoryPanel.padding) + this.inventoryPanel.padding + 35; // 標題高度
-         this.inventoryPanel.x = w - this.inventoryPanel.w - margin;
-         this.inventoryPanel.y = h / 2 - this.inventoryPanel.h / 2;
-
-         this.equipmentPanel.slotSize = this.inventoryPanel.slotSize;
-         this.equipmentPanel.padding = this.inventoryPanel.padding;
-         this.equipmentPanel.h = this.inventoryPanel.h; // 高度一致
-         this.equipmentPanel.w = this.equipmentPanel.slotSize * 1 + this.equipmentPanel.padding * 2 + 60; // 1列格子+標籤寬度
-         this.equipmentPanel.x = this.inventoryPanel.x - this.equipmentPanel.w - margin;
-         this.equipmentPanel.y = this.inventoryPanel.y;
-
-         // Ensure panels stay on screen
-         this.inventoryPanel.x = max(margin, this.inventoryPanel.x);
-         this.inventoryPanel.y = max(margin, this.inventoryPanel.y);
-         this.equipmentPanel.x = max(margin, this.equipmentPanel.x);
-         this.equipmentPanel.y = max(margin, this.equipmentPanel.y);
-     }
-
-    addFloatingText(text, worldX, worldY, color = 'white', duration = 1000, size = 16) {
-        // Make sure FloatingText class is defined
-        if (typeof FloatingText !== 'undefined') {
-            this.floatingTexts.push(new FloatingText(text, worldX, worldY, color, duration, size));
-        }
-    }
-
-    addMessage(text, p5color = color(255), duration = 3000) {
-        // Make sure SystemMessage class is defined
-         if (typeof SystemMessage !== 'undefined') {
-            this.systemMessages.push(new SystemMessage(text, p5color, duration));
-            if (this.systemMessages.length > this.maxMessages) {
-                this.systemMessages.shift();
-            }
-         }
-     }
-
-    toggleInventory() {
-        this.showInventory = !this.showInventory;
-        if (this.showInventory) {
-             if (typeof playSound === 'function') playSound('openInventory');
-             this.updateInventory(); // Mark for update
-             this.updateEquipment(); // Mark for update
-        } else {
-             if (typeof playSound === 'function') playSound('closeInventory');
-             this.tooltip.show = false; // Hide tooltip when closing
-        }
-    }
-
-    // These don't need to do anything, they are just flags for potential future use
-    // or to be called if specific update logic is needed when inventory/equipment changes.
-    updateInventory() { /* console.log("Inventory flagged for update."); */ }
-    updateEquipment() { /* console.log("Equipment flagged for update."); */ }
-
-     handleMouseClick(mx, my) {
-         // Ensure player is accessible and inventory is shown
-         const globalPlayer = (typeof player !== 'undefined') ? player : null;
-         if (!globalPlayer || !this.showInventory) return false;
-
-         // Check inventory slots
-         const inv = this.inventoryPanel;
-         const invSize = globalPlayer.inventory ? globalPlayer.inventory.length : 0;
-         for (let i = 0; i < invSize; i++) {
-             const { x, y, w, h } = this.getSlotRect(inv, i);
-             if (mx > x && mx < x + w && my > y && my < y + h) {
-                 const item = globalPlayer.inventory[i];
-                 if (item) {
-                     if (mouseButton === RIGHT) { // Right-click: Use/Equip
-                         if (item.type === 'consumable' && typeof globalPlayer.useItem === 'function') {
-                             globalPlayer.useItem(i);
-                             return true; // Consumed action
-                         } else if (item.type === 'equipment' && typeof globalPlayer.equipItem === 'function') {
-                             globalPlayer.equipItem(i);
-                             return true; // Consumed action
-                         }
-                     } else if (mouseButton === LEFT) { // Left-click (potential drag start)
-                         console.log(`Left-clicked inventory ${i}: ${item.name}`);
-                         // Add drag logic here later if needed
-                         return true; // Consumed action
-                     }
-                 }
-             }
-         }
-
-         // Check equipment slots
-         const eq = this.equipmentPanel;
-         const slots = this.getEquipmentSlotLayout(eq);
-         for (const slotInfo of slots) {
-              const { name, x, y, w, h } = slotInfo;
-              if (mx > x && mx < x + w && my > y && my < y + h) {
-                   console.log(`Clicked equipment slot ${name}`);
-                   if (globalPlayer.equipment && globalPlayer.equipment[name]) { // Check if slot is equipped
-                        const equippedItem = globalPlayer.equipment[name];
-                        if (mouseButton === RIGHT) { // Right-click: Unequip
-                             if (typeof globalPlayer.unequipItem === 'function') {
-                                 globalPlayer.unequipItem(name);
-                                 return true; // Consumed action
-                             }
-                        } else if (mouseButton === LEFT) { // Left-click
-                             console.log(`Left-clicked equipment ${name}: ${equippedItem.name}`);
-                              // Add drag logic here later if needed
-                             return true; // Consumed action
-                        }
-                   }
-              }
-         }
-         return false; // Click was inside UI area but not on an interactive element
-     }
-
-     handleMouseMove(mx, my) {
-         const globalPlayer = (typeof player !== 'undefined') ? player : null;
-         if (!globalPlayer || !this.showInventory) {
-             this.tooltip.show = false;
-             return;
-         }
-         this.tooltip.show = false; // Reset tooltip visibility
-
-         // Check Inventory
-         const inv = this.inventoryPanel;
-         const invSize = globalPlayer.inventory ? globalPlayer.inventory.length : 0;
-         for (let i = 0; i < invSize; i++) {
-             const { x, y, w, h } = this.getSlotRect(inv, i);
-             if (mx > x && mx < x + w && my > y && my < y + h) {
-                 const item = globalPlayer.inventory[i];
-                 if (item) { this.showTooltip(item, mx, my); return; } // Show tooltip and exit
-             }
-         }
-
-         // Check Equipment
-         const eq = this.equipmentPanel;
-         const slots = this.getEquipmentSlotLayout(eq);
-         for (const slotInfo of slots) {
-              const { name, x, y, w, h } = slotInfo;
-              if (mx > x && mx < x + w && my > y && my < y + h) {
-                   const item = globalPlayer.equipment ? globalPlayer.equipment[name] : null;
-                   if (item) { this.showTooltip(item, mx, my); return; } // Show tooltip and exit
-              }
-         }
-         // If mouse is over UI but not a slot, tooltip remains hidden (already set to false)
-     }
-
-     // Helper to get slot rectangle based on panel and index
-     getSlotRect(panel, index) {
-          // Ensure panel has cols property, default if not
-          const cols = panel.cols || 4;
-          const col = index % cols;
-          const row = floor(index / cols); // Assumes floor is available
-          const x = panel.x + panel.padding + col * (panel.slotSize + panel.padding);
-          const y = panel.y + panel.padding + 35 + row * (panel.slotSize + panel.padding); // +35 for title height
-          return { x: x, y: y, w: panel.slotSize, h: panel.slotSize };
-     }
-
-      // Helper to define the layout of equipment slots (could be cached)
-      getEquipmentSlotLayout(panel) {
-          const slotKeys = ['weapon', 'helmet', 'armor', 'boots', 'amulet', 'ring1', 'ring2'];
-          let slots = [];
-          let currentY = panel.y + panel.padding + 35; // Start below title area
-          for (const key of slotKeys) {
-               slots.push({
-                    name: key,
-                    x: panel.x + panel.padding,
-                    y: currentY,
-                    w: panel.slotSize,
-                    h: panel.slotSize
-               });
-               currentY += panel.slotSize + panel.padding; // Move down for the next slot
-          }
-          return slots;
-      }
-
-     showTooltip(item, mx, my) {
-          if (!item) { this.tooltip.show = false; return; } // Don't show for null item
-
-          this.tooltip.text = this.generateItemTooltip(item);
-
-          // Pre-calculate tooltip size (ensure p5 text functions are ready)
-          if (typeof textSize === 'function' && typeof textWidth === 'function') {
-              push();
-              textSize(13); textFont('sans-serif');
-              let lines = this.tooltip.text.split('\n');
-              let maxWidth = 0;
-              lines.forEach(line => {
-                  // Basic removal of color codes for width calculation
-                  let cleanLine = line.replace(/\|c[0-9A-Fa-f]{6,8}/g, '').replace(/\|r/g, '');
-                  maxWidth = max(maxWidth, textWidth(cleanLine)); // use p5.max
-              });
-              this.tooltip.w = maxWidth + 20; // Add horizontal padding
-              this.tooltip.h = lines.length * 15 + 15; // Estimate height based on line height + padding
-              pop();
-          } else {
-              // Fallback size calculation if p5 text functions aren't ready
-              this.tooltip.w = 150;
-              this.tooltip.h = 100;
-              console.warn("p5 text functions not ready for tooltip size calculation.");
-          }
-
-
-          // Position tooltip relative to mouse
-          this.tooltip.x = mx + 15;
-          this.tooltip.y = my + 15;
-
-          // Adjust position to keep tooltip on screen
-          const screenW = (typeof width !== 'undefined') ? width : 600;
-          const screenH = (typeof height !== 'undefined') ? height : 400;
-          if (this.tooltip.x + this.tooltip.w > screenW) {
-              this.tooltip.x = mx - this.tooltip.w - 15; // Move to the left of the cursor
-          }
-          if (this.tooltip.y + this.tooltip.h > screenH) {
-              this.tooltip.y = my - this.tooltip.h - 15; // Move above the cursor
-          }
-          // Ensure it doesn't go off the top-left
-          this.tooltip.x = max(0, this.tooltip.x);
-          this.tooltip.y = max(0, this.tooltip.y);
-
-          this.tooltip.show = true; // Mark tooltip to be shown
-     }
-
-
-     generateItemTooltip(item) {
-          // Use RarityColors safely, providing a default
-          const rarityCol = (typeof RarityColors !== 'undefined' && RarityColors[item.rarity]) ? RarityColors[item.rarity] : '#FFFFFF';
-          let rarityColorHex = rarityCol.substring(1); // Remove '#'
-
-          let tip = `|c${rarityColorHex}${item.name}|r\n`; // Item name in rarity color
-
-          // Use UIText safely, providing fallbacks
-          const uiTextGet = (key, fallback) => (typeof UIText !== 'undefined' && UIText[key]) ? UIText[key] : fallback;
-
-          if (item.type === 'equipment') {
-               const slotText = uiTextGet(item.slot, item.slot || 'Unknown Slot'); // Translate slot name
-               tip += `${uiTextGet('equip', 'Equipment')} (${slotText})\n`;
-               if (item.stats) {
-                   for (const stat in item.stats) {
-                        let sign = item.stats[stat] >= 0 ? '+' : '';
-                        let statText = uiTextGet(stat, stat); // Translate stat name
-                        tip += `|cFFFFFFA0${statText}: ${sign}${item.stats[stat]}|r\n`; // Dim yellow for stats
-                   }
-               }
-          } else if (item.type === 'consumable') {
-               tip += `|cFFDDA0DD${uiTextGet('use', 'Use')}|r\n`; // Light purple for Use
-               if (item.effect) {
-                   for (const effect in item.effect) {
-                        let effectText = uiTextGet(effect, effect);
-                        tip += `Restore ${effectText}: ${item.effect[effect]}\n`;
-                   }
-               }
-          } else if (item.type === 'material') {
-               tip += `|cFFB0B0B0Material|r\n`; // Gray for Material
-          }
-
-          if (item.stackable) {
-               tip += `Quantity: ${item.quantity} / ${item.maxStack}\n`;
-          }
-
-          tip += `\n|cFFB0B0B0"${item.description || ''}"|r`; // Gray description, ensure exists
-          return tip;
-      }
-
-
-    render() {
-        // Ensure p5 functions and global variables (like player, camera) are available
-        if (typeof push !== 'undefined') {
-            push(); // Save global draw state
-        } else {
-            console.error("p5 'push' function not available for UI rendering.");
-            return;
-        }
-
-        const globalPlayer = (typeof player !== 'undefined') ? player : null;
-        const screenW = (typeof width !== 'undefined') ? width : 600;
-        const screenH = (typeof height !== 'undefined') ? height : 400;
-
-
-        // --- Bottom HUD ---
-        if (globalPlayer && typeof drawHealthBar === 'function') { // Check dependencies
-            const barHeight = 18;
-            const barWidth = screenW / 4.5;
-            const barY = this.bottomUIStartY; // Calculated in calculateLayout
-            const hpBarX = screenW / 2 - barWidth - 5;
-            const mpBarX = screenW / 2 + 5;
-
-             // Safe access to player stats
-             const currentHP = globalPlayer.stats ? globalPlayer.stats.hp : 0;
-             const maxHP = globalPlayer.currentStats ? globalPlayer.currentStats.maxHP : 1;
-             const currentMP = globalPlayer.stats ? globalPlayer.stats.mp : 0;
-             const maxMP = globalPlayer.currentStats ? globalPlayer.currentStats.maxMP : 1;
-             const currentXP = globalPlayer.stats ? globalPlayer.stats.xp : 0;
-             const nextXP = globalPlayer.stats ? globalPlayer.stats.xpToNextLevel : 1;
-             const currentLvl = globalPlayer.stats ? globalPlayer.stats.level : 0;
-
-             const uiTextGet = (key, fallback) => (typeof UIText !== 'undefined' && UIText[key]) ? UIText[key] : fallback;
-
-
-            // HP Bar
-             drawHealthBar(currentHP, maxHP, hpBarX, barY, barWidth, barHeight, color(80,0,0,190), color(255,40,40,230));
-             fill(255); textSize(12); textAlign(CENTER, CENTER);textFont('monospace');
-             text(`${currentHP}/${maxHP}`, hpBarX + barWidth / 2, barY + barHeight / 2);
-             fill(255,220,220); textAlign(RIGHT, CENTER); textFont('sans-serif'); textSize(11);
-             text(uiTextGet('hp', 'HP'), hpBarX - 8, barY + barHeight / 2); // Label
-
-            // MP Bar
-             drawHealthBar(currentMP, maxMP, mpBarX, barY, barWidth, barHeight, color(0,0,80,190), color(80,80,255,230));
-             fill(255); textSize(12); textAlign(CENTER, CENTER); textFont('monospace');
-             text(`${currentMP}/${maxMP}`, mpBarX + barWidth / 2, barY + barHeight / 2);
-              fill(220,220,255); textAlign(LEFT, CENTER); textFont('sans-serif'); textSize(11);
-              text(uiTextGet('mp', 'MP'), mpBarX + barWidth + 8, barY + barHeight / 2); // Label
-
-            // XP Bar
-            const xpBarY = barY + barHeight + 5;
-            const xpBarWidth = barWidth * 2 + 10;
-            const xpBarX = hpBarX;
-            const xpBarHeight = barHeight * 0.5;
-            fill(80, 80, 0, 180); rect(xpBarX, xpBarY, xpBarWidth, xpBarHeight, 3);
-            fill(255, 255, 100, 220);
-            const xpRatio = (nextXP > 0) ? constrain(currentXP / nextXP, 0, 1) : 0;
-            if (xpRatio > 0) {
-                 rect(xpBarX, xpBarY, xpBarWidth * xpRatio, xpBarHeight, 3);
-            }
-             fill(230); textSize(10); textAlign(CENTER, CENTER); textFont('monospace');
-              stroke(0,150); strokeWeight(1);
-             text(`Lvl ${currentLvl} (${currentXP}/${nextXP})`, xpBarX + xpBarWidth / 2, xpBarY + xpBarHeight / 2);
-              noStroke();
-        }
-
-        // Skill Bar (Placeholder)
-        const skillBarY = screenH - 55;
-        const skillSlotSize = 40;
-        const skillSlots = 6;
-        const skillBarWidth = skillSlots * (skillSlotSize + 5) - 5;
-        const skillBarX = screenW / 2 - skillBarWidth / 2;
-        fill(30, 30, 30, 180); stroke(80); strokeWeight(1);
-        rect(skillBarX - 5, skillBarY - 5, skillBarWidth + 10, skillSlotSize + 10, 5);
-        for (let i = 0; i < skillSlots; i++) {
-            let x = skillBarX + i * (skillSlotSize + 5);
-            fill(50, 50, 50, 200); stroke(100);
-            rect(x, skillBarY, skillSlotSize, skillSlotSize, 3);
-            // Placeholder icons/text
-            fill(200); textSize(10); textAlign(CENTER, CENTER);
-            if (i === 0) text("[LMB]", x + skillSlotSize/2, skillBarY + skillSlotSize/2); // Left Mouse
-            if (i === 1) text("[RMB]", x + skillSlotSize/2, skillBarY + skillSlotSize/2); // Right Mouse
-             if (i > 1) text(`[${i-1}]`, x + skillSlotSize/2, skillBarY + skillSlotSize/2); // Number keys
-        }
-
-
-        // --- Floating Texts ---
-        const camX = (typeof camera !== 'undefined') ? camera.x : 0;
-        const camY = (typeof camera !== 'undefined') ? camera.y : 0;
-        for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
-            // FloatingText render/update methods should handle p5 function checks internally
-            this.floatingTexts[i].render(camX, camY);
-            if (!this.floatingTexts[i].update()) {
-                this.floatingTexts.splice(i, 1);
-            }
-        }
-
-        // --- System Messages ---
-        const messageStartX = 15;
-        let messageStartY = this.bottomUIStartY - 25; // Position above HUD
-        for (let i = this.systemMessages.length - 1; i >= 0; i--) {
-             this.systemMessages[i].update(); // Should check p5 functions if needed
-             if (this.systemMessages[i].isExpired()) {
-                 this.systemMessages.splice(i, 1);
-                 continue;
-             }
-             this.systemMessages[i].render(messageStartX, messageStartY); // Should check p5 functions
-             messageStartY -= 18; // Move upwards for next message
-         }
-
-
-        // --- Inventory/Equipment Panels ---
-        if (this.showInventory) {
-            this.renderInventoryPanel();
-            this.renderEquipmentPanel();
-            // Tooltip rendering relies on showTooltip setting the flag
-            if (this.tooltip.show && this.tooltip.text) {
-                 this.renderTooltip();
-            }
-        } else {
-             // Only render mouse hover tooltips when inventory is closed
-             this.renderMouseTooltip();
-        }
-
-        if (typeof pop === 'function') {
-            pop(); // Restore global draw state
-        }
-    }
-
-    renderInventoryPanel() {
-        // Ensure player and PlayerDefaults are accessible
-        const globalPlayer = (typeof player !== 'undefined') ? player : null;
-        const pDefaults = (typeof PlayerDefaults !== 'undefined') ? PlayerDefaults : { inventorySize: 20 };
-        if (!globalPlayer) return;
-
-        const inv = this.inventoryPanel;
-        push(); // Use p5 push/pop
-        fill(25, 25, 25, 235); stroke(180, 150, 100); strokeWeight(1.5);
-        rect(inv.x, inv.y, inv.w, inv.h, 8); // Panel background
-
-        fill(220, 200, 180); textSize(16); textAlign(CENTER, TOP); textFont('Georgia');
-        const uiTextGet = (key, fallback) => (typeof UIText !== 'undefined' && UIText[key]) ? UIText[key] : fallback;
-        text(uiTextGet('inventory', 'Inventory'), inv.x + inv.w / 2, inv.y + inv.padding); // Title
-
-        for (let i = 0; i < pDefaults.inventorySize; i++) { // Iterate up to max size
-            const { x, y, w, h } = this.getSlotRect(inv, i); // Uses helper
-            fill(40, 40, 40, 200); stroke(80); strokeWeight(1);
-            rect(x, y, w, h, 4); // Slot background
-
-            // Safely access inventory item
-            const item = (globalPlayer.inventory && i < globalPlayer.inventory.length) ? globalPlayer.inventory[i] : null;
-            if (item) {
-                 this.drawItemInSlot(item, x, y, w, h); // Use helper function
-            }
-        }
-         pop();
-    }
-
-    renderEquipmentPanel() {
-         const globalPlayer = (typeof player !== 'undefined') ? player : null;
-         if (!globalPlayer) return;
-
-         const eq = this.equipmentPanel;
-          const slots = this.getEquipmentSlotLayout(eq); // Uses helper
-          const slotLabels = { weapon: '武器', helmet: '頭盔', armor: '胸甲', boots: '靴子', amulet: '項鍊', ring1: '戒指1', ring2: '戒指2' };
-
-         push();
-         fill(25, 25, 25, 235); stroke(180, 150, 100); strokeWeight(1.5);
-         rect(eq.x, eq.y, eq.w, eq.h, 8); // Panel background
-
-         const uiTextGet = (key, fallback) => (typeof UIText !== 'undefined' && UIText[key]) ? UIText[key] : fallback;
-         fill(220, 200, 180); textSize(16); textAlign(CENTER, TOP); textFont('Georgia');
-         text(uiTextGet('equip', 'Equipment'), eq.x + eq.w / 2, eq.y + eq.padding); // Title
-
-         for(const slotInfo of slots){
-               const { name, x, y, w, h } = slotInfo;
-                fill(40, 40, 40, 200); stroke(80); strokeWeight(1);
-                rect(x, y, w, h, 4); // Slot background
-
-                // Slot label
-                 fill(160); textSize(10); textAlign(LEFT, CENTER); textFont('sans-serif');
-                 text(slotLabels[name] || name, x + w + eq.padding / 2, y + h / 2);
-
-                 // Safely access equipment item
-                 const item = (globalPlayer.equipment && globalPlayer.equipment[name]) ? globalPlayer.equipment[name] : null;
-                 if (item) {
-                      this.drawItemInSlot(item, x, y, w, h); // Use helper function
-                 }
-         }
-         pop();
-    }
-
-     // Helper to draw item icon in UI slot
-     drawItemInSlot(item, x, y, w, h){
-          if (!item) return; // Don't draw null items
-          push();
-          translate(x + w / 2, y + h / 2);
-           const itemSize = w * 0.7;
-           // Use getRarityP5Color safely
-           const rarityColorFunc = (typeof getRarityP5Color === 'function') ? getRarityP5Color : () => color(255);
-           const rarityColor = rarityColorFunc(item.rarity);
-
-           // Background glow based on rarity
-            if (item.rarity !== 'common') {
-                 let glowAlpha = 100;
-                 noStroke(); fill(red(rarityColor), green(rarityColor), blue(rarityColor), glowAlpha * 0.5);
-                 ellipse(0, 0, w * 0.9, h * 0.9);
-                 fill(red(rarityColor), green(rarityColor), blue(rarityColor), glowAlpha);
-                 ellipse(0, 0, w * 0.8, h * 0.8);
-            }
-
-            // Simple icon representation
-            noStroke();
-           if (item.type === 'equipment') {
-               fill(180, 180, 220); rectMode(CENTER);
-                // Simple shapes per slot maybe?
-                 if(item.slot === 'weapon') rect(0,0, itemSize*0.3, itemSize*1.1);
-                 else if(item.slot === 'helmet') ellipse(0,-itemSize*0.1, itemSize*0.8, itemSize*0.7);
-                 else if(item.slot === 'armor') rect(0,0, itemSize*0.9, itemSize*0.9);
-                 else if(item.slot === 'boots') rect(0, itemSize*0.2, itemSize*0.6, itemSize*0.5);
-                 else ellipse(0,0, itemSize); // Default ellipse
-           } else if (item.type === 'consumable') {
-                if(item.effect && item.effect.hp) fill(255, 80, 80); else if(item.effect && item.effect.mp) fill(80, 80, 255); else fill(200, 200, 100);
-                ellipse(0, 0, itemSize, itemSize);
-           } else {
-               fill(150); ellipse(0, 0, itemSize * 0.9, itemSize * 0.7);
-           }
-            // Highlight
-            fill(255, 255, 255, 180); ellipse(-itemSize * 0.2, -itemSize * 0.2, itemSize * 0.15);
-
-           pop();
-
-          // Quantity text
-           if (item.stackable && item.quantity > 1) {
-                push();
-                fill(255); textSize(11); textAlign(RIGHT, BOTTOM); textFont('monospace');
-                 stroke(0, 180); strokeWeight(1.5);
-                text(item.quantity, x + w - 3, y + h - 3);
-                pop();
-           }
-     }
-
-
-    renderTooltip() {
-         if (!this.tooltip.show || !this.tooltip.text) return;
-         const tipX = this.tooltip.x; const tipY = this.tooltip.y;
-         const tipW = this.tooltip.w; const tipH = this.tooltip.h;
-
-         push();
-         // Background Panel
-         fill(15, 15, 15, 240);
-         stroke(180, 180, 120); // Gold border
-         strokeWeight(1);
-         rect(tipX, tipY, tipW, tipH, 4);
-
-         // Text content with color parsing
-         let currentY = tipY + 10 + 2; // Line height adjustment
-         let lines = this.tooltip.text.split('\n');
-         textFont('sans-serif');
-         textSize(13);
-         let defaultColor = color(210, 210, 210); // Default tooltip text color (off-white)
-
-         lines.forEach(line => {
-             let currentX = tipX + 10;
-             fill(defaultColor); // Start line with default color
-
-              // Basic color code parsing: |cRRGGBBText|r or |cAARRGGBBText|r or |c#HEXCODEText|r
-              // Regex to find color codes and the reset code
-              let parts = line.split(/(\|c(?:[0-9A-Fa-f]{6,8}|#[0-9A-Fa-f]{6}))|(\|r)/g).filter(Boolean);
-
-              parts.forEach(part => {
-                   if (part.startsWith('|c')) {
-                        let hexColorString = part.substring(2);
-                        if (hexColorString.startsWith('#')) hexColorString = hexColorString.substring(1);
-
-                        try {
-                             let parsedColor = color('#' + hexColorString); // Use p5's color parsing
-                             fill(parsedColor); // Apply parsed color
-                        } catch (e) {
-                             console.warn("Invalid hex code in tooltip:", part);
-                             fill(defaultColor); // Fallback to default if parsing fails
-                        }
-
-                   } else if (part === '|r') {
-                        fill(defaultColor); // Reset to default color
-                   } else {
-                        // Draw the actual text part
-                         text(part, currentX, currentY);
-                         currentX += textWidth(part); // Move cursor for next part
-                   }
-              });
-             currentY += 15; // Move to next line (adjust line height as needed)
-         });
-         pop();
-     }
-
-      renderMouseTooltip() {
-          if (this.showInventory) return; // Don't show world tooltips if inventory is open
-
-          // Ensure global variables and p5 functions are available
-          const camX = (typeof camera !== 'undefined') ? camera.x : 0;
-          const camY = (typeof camera !== 'undefined') ? camera.y : 0;
-          const mx = (typeof mouseX !== 'undefined') ? mouseX : 0;
-          const my = (typeof mouseY !== 'undefined') ? mouseY : 0;
-          const globalWorldItems = (typeof worldItems !== 'undefined') ? worldItems : [];
-          const globalMonsters = (typeof monsters !== 'undefined') ? monsters : [];
-          const globalNpcs = (typeof npcs !== 'undefined') ? npcs : [];
-          const map = (typeof currentMap !== 'undefined') ? currentMap : null;
-          const pDefaults = (typeof PlayerDefaults !== 'undefined') ? PlayerDefaults : { pickupRadiusSq: (TILE_SIZE * 1.2)**2 };
-          const uiTextGet = (key, fallback) => (typeof UIText !== 'undefined' && UIText[key]) ? UIText[key] : fallback;
-          const rarityColorFunc = (typeof getRarityP5Color === 'function') ? getRarityP5Color : () => color(255);
-
-
-          let worldMx = mx + camX;
-          let worldMy = my + camY;
-          let hoverText = "";
-          let hoverP5Color = color(255);
-          let targetObject = null; // What the mouse is hovering over
-
-           // 1. Check Dropped Items
-           let closestItemDistSq = pDefaults.pickupRadiusSq * 0.9; // Use player's pickup range
-           let hoveredItem = null;
-           for (let item of globalWorldItems) {
-                if (!item || !item.pos) continue; // Skip invalid items
-               let dSq = distSq(worldMx, worldMy, item.pos.x, item.pos.y);
-               if (dSq < closestItemDistSq) {
-                   hoveredItem = item;
-                   closestItemDistSq = dSq; // Update closest distance
-               }
-           }
-           if (hoveredItem && hoveredItem.item) { // Check item exists
-                targetObject = hoveredItem;
-                hoverText = `${uiTextGet('pickup','Pickup')}\n${hoveredItem.item.name}`;
-                hoverP5Color = rarityColorFunc(hoveredItem.item.rarity);
-           } else {
-               // 2. Check Monsters
-               let hoveredMonster = null;
-               for (let monster of globalMonsters) {
-                    if(!monster || monster.state === 'dead' || !monster.pos || !monster.size) continue;
-                    // Use point-in-rectangle check (or ellipse)
-                   if (abs(worldMx - monster.pos.x) < monster.size/2 && abs(worldMy - monster.pos.y) < monster.size/2) {
-                       hoveredMonster = monster;
-                       break;
-                   }
-               }
-               if (hoveredMonster) {
-                    targetObject = hoveredMonster;
-                    hoverText = `${uiTextGet('attackTarget','Attack')}\n${hoveredMonster.name} (${hoveredMonster.stats.hp}/${hoveredMonster.baseStats.maxHP})`;
-                    hoverP5Color = color(255, 90, 90); // Attack Red
-               } else {
-                    // 3. Check NPCs (only in village)
-                    if (map && map.isVillage) {
-                        let hoveredNpc = null;
-                         for(let npc of globalNpcs) {
-                              if(!npc || npc.state === 'dead' || !npc.pos || !npc.size) continue;
-                               if (abs(worldMx - npc.pos.x) < npc.size/2 && abs(worldMy - npc.pos.y) < npc.size/2) {
-                                   hoveredNpc = npc;
-                                   break;
-                               }
-                         }
-                          if(hoveredNpc){
-                               targetObject = hoveredNpc;
-                               hoverText = `${hoveredNpc.name}\n(Click to Interact)`; // Hardcoded text, maybe add to UIText
-                               hoverP5Color = color(120, 180, 255); // Interact Blue
-                          }
-                    }
-                     // 4. Check Map Transitions (if nothing else hovered)
-                     if(!targetObject && map){ // Check map exists
-                          if(map.isOnExit(worldMx, worldMy)){
-                                hoverText = uiTextGet('leaveVillage', 'Leave Area');
-                                hoverP5Color = color(255, 255, 120); // Exit Yellow
-                          } else if (map.isOnVillageEntrance(worldMx, worldMy)) {
-                                hoverText = uiTextGet('enterVillage', 'Enter Area');
-                                hoverP5Color = color(120, 255, 120); // Enter Green
-                          }
-                     }
-               }
-           }
-
-
-           if (hoverText) {
-               push();
-               fill(hoverP5Color);
-               stroke(0, 200); // Black outline
-               strokeWeight(2);
-               textSize(13);
-               textAlign(CENTER, BOTTOM);
-               textFont('sans-serif');
-               text(hoverText, mx, my - 15); // Position relative to screen mouse pos
-               pop();
-           }
-
-           // Change mouse cursor based on hover target? (Needs DOM manipulation or CSS)
-           // Example (conceptual - won't work directly in p5 canvas without extra setup):
-           // let cursorStyle = 'default';
-           // if (targetObject instanceof Monster) cursorStyle = 'crosshair';
-           // else if (targetObject instanceof DroppedItem || targetObject instanceof Npc) cursorStyle = 'pointer';
-           // document.body.style.cursor = cursorStyle;
-      }
-
-}
-
-
-// =============================================
-// FILE: player.js
-// =============================================
-console.log("Loading: player.js");
-class Player {
-    constructor(x, y) {
-        this.pos = createVector(x, y);
-        this.targetPos = createVector(x, y);
-        this.size = PlayerDefaults.size;
-        this.color = PlayerDefaults.color;
-        this.name = "玩家";
-
-        // Deep copy defaults to avoid modifying the original objects
-        this.baseStats = JSON.parse(JSON.stringify({
-            maxHP: PlayerDefaults.hp,
-            maxMP: PlayerDefaults.mp,
-            attack: PlayerDefaults.attack,
-            defense: PlayerDefaults.defense,
-            speed: PlayerDefaults.speed,
-            attackRangeSq: PlayerDefaults.attackRange ** 2, // Use squared value internally
-        }));
-        this.currentStats = { ...this.baseStats }; // Shallow copy is okay here as values are primitive (or re-calculated)
-        this.stats = {
-            hp: PlayerDefaults.hp,
-            mp: PlayerDefaults.mp,
-            level: PlayerDefaults.level,
-            xp: PlayerDefaults.xp,
-            xpToNextLevel: PlayerDefaults.xpToNextLevel,
-        };
-
-        // Initialize inventory with nulls
-        this.inventory = new Array(PlayerDefaults.inventorySize).fill(null);
-        // Initialize equipment slots with null
-        this.equipment = {
-            weapon: null, helmet: null, armor: null, boots: null,
-            amulet: null, ring1: null, ring2: null,
-        };
-
-        this.targetEnemy = null;
-        this.isMoving = false;
-        this.lastAttackTime = 0;
-        this.attackCooldown = 800; // Milliseconds
-        this.pickupRadiusSq = PlayerDefaults.pickupRadiusSq; // Use squared value
-
-        this.lastStepSoundTime = 0; // For controlling step sound frequency
-
-        this.updateCombinedStats(); // Initial stat calculation
-    }
-
-    moveTo(targetX, targetY) {
-        const map = (typeof currentMap !== 'undefined') ? currentMap : null;
-        // Check if the target point is valid
-        if (!map || map.isObstacle(targetX, targetY) || map.isOutsideBounds(targetX, targetY)){
-             console.log("Target point unreachable");
-             if (typeof playSound === 'function') playSound('invalidAction'); // Play sound if function exists
-             return; // Don't set target or move
-        }
-        this.targetPos.set(targetX, targetY);
-        this.targetEnemy = null; // Clear enemy target when moving manually
-        this.isMoving = true;
-    }
-
-    setAttackTarget(enemy) {
-        if (enemy && enemy.stats && enemy.stats.hp > 0) { // Check enemy and its stats exist
-            this.targetEnemy = enemy;
-            this.isMoving = true; // Start moving towards the enemy
-            // if (typeof playSound === 'function') playSound('targetEnemy'); // Optional targeting sound
-        } else {
-            this.targetEnemy = null; // Clear target if invalid or dead
-        }
-    }
-
-    attack(target) {
-        // Basic checks
-        if (!target || !target.stats || target.stats.hp <= 0) {
-            this.targetEnemy = null;
-            return;
-        }
-        const now = millis(); // Assumes millis() is available
-        if (now - this.lastAttackTime >= this.attackCooldown) {
-            console.log(`${this.name} attacks ${target.name}`);
-            // Calculate damage safely
-            const targetDefense = (target.currentStats && target.currentStats.defense !== undefined) ? target.currentStats.defense : 0;
-            let damage = max(1, this.currentStats.attack - targetDefense); // Assumes max() is available
-            damage = floor(random(damage * 0.85, damage * 1.15)); // Assumes floor() and random() are available
-
-             if (typeof playSound === 'function') playSound('playerAttack'); // Play sound
-
-            // Ensure target has takeDamage method
-            if (typeof target.takeDamage === 'function') {
-                target.takeDamage(damage, this);
-            } else {
-                console.error("Target has no takeDamage method:", target);
-            }
-
-            this.lastAttackTime = now;
-            this.playAttackAnimation(target); // Play visual effect
-
-            // Clear target if it died from this attack
-            if (target.stats.hp <= 0) {
-                this.targetEnemy = null;
-            }
-        }
-    }
-
-    playAttackAnimation(target){
-         // Add visual effect if visualEffects array exists
-         if (typeof visualEffects !== 'undefined' && target && target.pos) {
-             let effect = {
-                  type: 'line',
-                  start: this.pos.copy(), // Assumes copy() method exists
-                  end: target.pos.copy(),
-                  color: color(255, 200, 0, 200), // Assumes color() exists
-                  duration: 150, // Milliseconds
-                  startTime: millis() // Assumes millis() exists
-             };
-              visualEffects.push(effect);
-         }
-    }
-
-
-    takeDamage(damage, attacker) {
-         if (!this.stats) return; // Safety check
-
-        this.stats.hp -= damage;
-        // Use uiManager safely
-        if (typeof uiManager !== 'undefined' && typeof uiManager.addFloatingText === 'function') {
-             uiManager.addFloatingText(`-${damage}`, this.pos.x + random(-5, 5), this.pos.y + random(-10, 0), 'red', 1200);
-        } else {
-             console.log(`Player took ${damage} damage`);
-        }
-
-         if (typeof playSound === 'function') playSound('playerHit'); // Play sound
-
-        if (this.stats.hp <= 0) {
-            this.die(attacker);
-        }
-
-         // Add flash effect safely
-         if (typeof visualEffects !== 'undefined') {
-             let effect = {
-                   type: 'flash', target: this, color: color(255, 0, 0, 150),
-                   duration: 200, startTime: millis()
-             };
-              visualEffects.push(effect);
-         }
-    }
-
-    die(killer) {
-        if (!this.stats) return; // Safety check
-        if (this.stats.hp > 0) this.stats.hp = 0; // Ensure HP is 0
-
-        // Check gameState existence before modifying
-        if (typeof gameState !== 'undefined' && gameState === 'gameOver') return; // Prevent double trigger
-
-        const killerName = (killer && killer.name) ? killer.name : 'unknown causes';
-        console.log(`${this.name} was slain by ${killerName}!`);
-         if (typeof playSound === 'function') playSound('playerDeath');
-
-        // Set gameState if it exists
-        if (typeof gameState !== 'undefined') gameState = 'gameOver';
-    }
-
-    gainXP(amount) {
-        if (!this.stats || amount <= 0) return; // Safety check
-
-        this.stats.xp += amount;
-         // Use uiManager safely
-        if (typeof uiManager !== 'undefined' && typeof uiManager.addMessage === 'function') {
-             const xpText = (typeof UIText !== 'undefined' && UIText.xp) ? UIText.xp : 'XP';
-             uiManager.addMessage(`+${amount} ${xpText}`, 'yellow', 2000);
-        } else {
-             console.log(`Player gained ${amount} XP`);
-        }
-
-        // Level up logic
-        while (this.stats.xp >= this.stats.xpToNextLevel) {
-             let xpRequiredForLevel = this.stats.xpToNextLevel; // Store needed XP before level up changes it
-             this.stats.xp -= xpRequiredForLevel; // Subtract needed XP *before* leveling up
-             if (this.stats.xp < 0) this.stats.xp = 0; // Prevent negative XP
-            this.levelUp(); // This will update xpToNextLevel
-            // No need to handle remaining XP here, it's already correct
-        }
-    }
-
-    levelUp() {
-         if (!this.stats || !this.baseStats) return; // Safety check
-
-        this.stats.level++;
-        // Adjust level up curve
-        this.stats.xpToNextLevel = floor(this.baseStats.xpToNextLevel * 1.6 + 50 + this.stats.level * 10); // Use base for scaling, add level bonus
-
-        const hpGain = 10 + floor(this.stats.level / 2);
-        const mpGain = 5 + floor(this.stats.level / 3);
-        const attackGain = 1 + floor(random(1, 3)); // Random gain between 1 and 2
-        const defenseGain = 1;
-
-        // Increase base stats
-        this.baseStats.maxHP += hpGain;
-        this.baseStats.maxMP += mpGain;
-        this.baseStats.attack += attackGain;
-        this.baseStats.defense += defenseGain;
-
-        // Full heal on level up
-        this.stats.hp = this.baseStats.maxHP;
-        this.stats.mp = this.baseStats.maxMP;
-
-        this.updateCombinedStats(); // Recalculate current stats
-
-        console.log(`Level Up! Reached level ${this.stats.level}!`);
-        // Use uiManager safely
-        if (typeof uiManager !== 'undefined' && typeof uiManager.addMessage === 'function') {
-             const levelUpText = (typeof UIText !== 'undefined' && UIText.levelUp) ? UIText.levelUp : 'Level Up';
-            uiManager.addMessage(`${levelUpText}! (${this.stats.level})`, 'lime', 3500);
-        }
-         if (typeof playSound === 'function') playSound('levelUp');
-
-          // Add level up visual effect safely
-          if (typeof visualEffects !== 'undefined') {
-              let effect = {
-                    type: 'circleExpand', target: this, color: color(255, 255, 100, 180),
-                    duration: 500, startTime: millis(), maxRadius: this.size * 2
-              };
-               visualEffects.push(effect);
-          }
-    }
-
-    pickupItem(droppedItem) {
-        if (!droppedItem || !droppedItem.item || droppedItem.invalid) return false; // Check validity
-        const item = droppedItem.item;
-        if (!this.inventory) return false; // Check inventory exists
-
-        // Use uiManager and playSound safely
-        const canPlaySound = typeof playSound === 'function';
-        const canShowMessage = typeof uiManager !== 'undefined' && typeof uiManager.addMessage === 'function';
-        const uiTextGet = (key, fallback) => (typeof UIText !== 'undefined' && UIText[key]) ? UIText[key] : fallback;
-        const rarityColorFunc = (typeof getRarityP5Color === 'function') ? getRarityP5Color : () => color(255);
-
-
-        // Try stacking first
-        if (item.stackable) {
-            for (let i = 0; i < this.inventory.length; i++) {
-                if (this.inventory[i] && this.inventory[i].id === item.id && this.inventory[i].quantity < this.inventory[i].maxStack) {
-                    let overflow = this.inventory[i].addQuantity(item.quantity); // addQuantity returns overflow
-                     if (overflow === 0) { // Fully stacked
-                          if (canShowMessage) uiManager.addMessage(`${uiTextGet('pickup','Pickup')}: ${item.name} x${item.quantity}`, rarityColorFunc(item.rarity), 2000);
-                          if (canPlaySound) playSound('pickupItem');
-                         return true; // Item picked up and stacked
-                     } else {
-                         // Partially stacked, update quantity for finding empty slot
-                         item.quantity = overflow;
-                         // Don't return yet, need to find a new slot for the remainder
-                     }
-                }
-            }
-        }
-
-        // Find empty slot if not fully stacked or not stackable
-        const emptySlotIndex = this.findEmptyInventorySlot();
-        if (emptySlotIndex !== -1) {
-            this.inventory[emptySlotIndex] = item; // Place item (or remaining stack)
-            const qtySuffix = item.stackable ? ` x${item.quantity}` : ''; // Show quantity only if stackable
-             if (canShowMessage) uiManager.addMessage(`${uiTextGet('pickup','Pickup')}: ${item.name}${qtySuffix}`, rarityColorFunc(item.rarity), 2000);
-             if (canPlaySound) playSound('pickupItem');
-            return true; // Item picked up into empty slot
-        } else {
-            // No empty slot found
-            if (canShowMessage) uiManager.addMessage(uiTextGet('inventoryFull', 'Inventory Full!'), 'orange');
-            if (canPlaySound) playSound('invalidAction');
-            return false; // Pickup failed
-        }
-    }
-
-    findEmptyInventorySlot() {
-        if (!this.inventory) return -1;
-        return this.inventory.findIndex(slot => slot === null);
-    }
-
-    useItem(inventoryIndex) {
-         if (!this.inventory || inventoryIndex < 0 || inventoryIndex >= this.inventory.length) return; // Bounds check
-
-        const item = this.inventory[inventoryIndex];
-        // Check if item exists and is consumable
-        if (item && item.type === 'consumable') {
-             // item.use(this) returns true if item still exists (quantity > 0), false otherwise
-             const itemStillExists = item.use(this); // 'use' handles sound and floating text
-             if (!itemStillExists) {
-                 this.inventory[inventoryIndex] = null; // Remove item if used up
-             }
-             // Update UI safely
-             if (typeof uiManager !== 'undefined' && typeof uiManager.updateInventory === 'function') uiManager.updateInventory();
-        } else {
-            console.log("Cannot use this item or slot is empty.");
-            if (typeof playSound === 'function') playSound('invalidAction');
-        }
-    }
-
-    equipItem(inventoryIndex) {
-         if (!this.inventory || !this.equipment || inventoryIndex < 0 || inventoryIndex >= this.inventory.length) return; // Safety checks
-
-        const item = this.inventory[inventoryIndex];
-        if (!item || item.type !== 'equipment') {
-            console.log("Cannot equip this item.");
-            if (typeof playSound === 'function') playSound('invalidAction');
-            return;
-        }
-
-        let targetSlot = item.slot; // The intended slot (e.g., 'weapon', 'ring')
-
-         // Handle special case for rings
-         if (targetSlot === 'ring') {
-              if (!this.equipment['ring1']) targetSlot = 'ring1'; // Equip to ring1 if empty
-              else if (!this.equipment['ring2']) targetSlot = 'ring2'; // Equip to ring2 if empty
-              else targetSlot = 'ring1'; // Default replace ring1 if both are full
-         }
-
-        // Check if the target slot exists in the equipment object
-        if (!this.equipment.hasOwnProperty(targetSlot)) {
-             console.log("Invalid equipment slot:", targetSlot);
-             if (typeof playSound === 'function') playSound('invalidAction');
-             return;
-        }
-
-        // Swap items: Put current equipped item (if any) back into the inventory slot
-        let previouslyEquipped = this.equipment[targetSlot]; // Store the item currently in the slot (can be null)
-        this.equipment[targetSlot] = item; // Equip the new item
-        this.inventory[inventoryIndex] = previouslyEquipped; // Place the old item back (or null if slot was empty)
-
-        console.log(`Equipped ${item.name} to ${targetSlot}`);
-        if (typeof playSound === 'function') playSound('equipItem'); // Equip sound
-
-        this.updateCombinedStats(); // Recalculate stats
-
-        // Update UI safely
-        if (typeof uiManager !== 'undefined') {
-            if (typeof uiManager.updateInventory === 'function') uiManager.updateInventory();
-            if (typeof uiManager.updateEquipment === 'function') uiManager.updateEquipment();
-        }
-    }
-
-    unequipItem(slot) { // Removed findNewSlot complexity for simplicity
-        if (!this.equipment || !this.equipment[slot]) return; // Nothing to unequip
-
-        const itemToUnequip = this.equipment[slot];
-
-        // Find an empty inventory slot
-        const emptySlotIndex = this.findEmptyInventorySlot();
-
-        if (emptySlotIndex !== -1) {
-            // Move item to inventory
-            this.inventory[emptySlotIndex] = itemToUnequip;
-            this.equipment[slot] = null; // Clear equipment slot
-
-            console.log(`Unequipped ${itemToUnequip.name} to inventory slot ${emptySlotIndex}`);
-            if (typeof playSound === 'function') playSound('equipItem'); // Use equip sound for unequip too
-
-            this.updateCombinedStats(); // Recalculate stats
-
-            // Update UI safely
-            if (typeof uiManager !== 'undefined') {
-                if (typeof uiManager.updateInventory === 'function') uiManager.updateInventory();
-                if (typeof uiManager.updateEquipment === 'function') uiManager.updateEquipment();
-            }
-        } else {
-            // Inventory full
-             const invFullText = (typeof UIText !== 'undefined' && UIText.inventoryFull) ? UIText.inventoryFull : 'Inventory Full';
-            console.warn(`Inventory full, cannot unequip ${itemToUnequip.name}!`);
-             if (typeof uiManager !== 'undefined' && typeof uiManager.addMessage === 'function') {
-                uiManager.addMessage(`${invFullText}, cannot unequip ${itemToUnequip.name}`, 'orange');
-             }
-             if (typeof playSound === 'function') playSound('invalidAction');
-        }
-    }
-
-
-    updateCombinedStats() {
-         if (!this.baseStats || !this.currentStats || !this.equipment || !this.stats) return; // Safety check
-
-        // Reset current stats to base stats (deep copy base if it contains objects/arrays)
-        // For this structure, a shallow copy is probably fine as baseStats values are primitive
-        this.currentStats = { ...this.baseStats };
-        // Ensure attackRangeSq is initialized correctly
-        this.currentStats.attackRangeSq = this.baseStats.attackRangeSq || (PlayerDefaults.attackRange ** 2);
-
-        // Apply stats from equipment
-        for (const slot in this.equipment) {
-            const item = this.equipment[slot];
-            if (item && item.stats) { // Check item and stats exist
-                for (const stat in item.stats) {
-                    // Check if the stat exists in currentStats or baseStats
-                     const value = item.stats[stat];
-                     if (value === undefined || value === null) continue; // Skip invalid stat values
-
-                    if (stat === 'maxHP' || stat === 'maxMP') {
-                         // Add to max stats
-                         this.currentStats[stat] = (this.currentStats[stat] || this.baseStats[stat] || 0) + value;
-                    } else if (stat === 'attackRange') {
-                         // Special handling for attack range (use max of base and equipped)
-                         // We store squared range, so square the item's range if provided in linear units
-                         const itemRangeSq = (value * TILE_SIZE)**2; // Assuming item range is in tiles
-                         this.currentStats.attackRangeSq = max(this.currentStats.attackRangeSq, itemRangeSq);
-                    } else if (this.currentStats.hasOwnProperty(stat)) {
-                        // Add to other existing stats (attack, defense, speed, etc.)
-                        this.currentStats[stat] += value;
-                    } else {
-                         // Potentially add new stats if defined in item but not base
-                         // this.currentStats[stat] = value; // Or handle specific cases
-                         console.warn(`Item ${item.name} has unhandled stat: ${stat}`);
-                    }
-                }
-            }
-        }
-
-        // Ensure HP/MP don't exceed new max values
-        this.stats.hp = min(this.stats.hp, this.currentStats.maxHP);
-        this.stats.mp = min(this.stats.mp, this.currentStats.maxMP);
-        // Ensure stats don't go below certain minimums (e.g., speed > 0)
-        this.currentStats.speed = max(0.5, this.currentStats.speed); // Minimum speed
-    }
-
-
-    update(obstacles, monsters, npcs) { // obstacles expected to be map grid or GameMap object
-        if (!this.stats || this.stats.hp <= 0) return false; // Don't update if dead
-
-        let moved = false;
-        let isTryingToMove = false; // Flag to indicate movement intent this frame
-
-        // --- Behavior Logic ---
-        if (this.targetEnemy) {
-            // Check if target is still valid
-            if (!this.targetEnemy.stats || this.targetEnemy.stats.hp <= 0) {
-                this.targetEnemy = null;
-                this.isMoving = false; // Stop moving if target died
-            } else {
-                const distToEnemySq = distSq(this.pos.x, this.pos.y, this.targetEnemy.pos.x, this.targetEnemy.pos.y);
-                let currentAttackRangeSq = this.currentStats.attackRangeSq; // Already squared
-
-                if (distToEnemySq <= currentAttackRangeSq) {
-                    // In attack range
-                    this.isMoving = false; // Stop moving to attack
-                    this.attack(this.targetEnemy); // Attempt attack
-                    isTryingToMove = false; // Not trying to move closer
-                } else {
-                     // Out of range, move towards target
-                    this.targetPos.set(this.targetEnemy.pos); // Update target position
-                    this.isMoving = true;
-                    isTryingToMove = true; // Intent is to move closer
-                }
-            }
-        } else if (this.isMoving) {
-            // Moving towards a point (not an enemy)
-            isTryingToMove = true; // Intent is to move to targetPos
-             const distToTargetSq = distSq(this.pos.x, this.pos.y, this.targetPos.x, this.targetPos.y);
-             // Check if close enough to target destination
-             if (distToTargetSq < (this.currentStats.speed * 0.8)**2) {
-                 this.isMoving = false; // Stop moving
-                 this.pos.set(this.targetPos); // Snap to final position
-                 isTryingToMove = false; // Reached destination
-             }
-        }
-
-        // --- Movement Execution ---
-        if (this.isMoving) {
-            // Ensure p5.Vector methods are available
-             if (typeof p5 !== 'undefined' && typeof p5.Vector !== 'undefined') {
-                let moveVec = p5.Vector.sub(this.targetPos, this.pos);
-                if (moveVec.magSq() > 1) { // Check magnitude to avoid NaN with setMag
-                    moveVec.setMag(this.currentStats.speed); // Set length to current speed
-                    let nextPos = p5.Vector.add(this.pos, moveVec);
-
-                    // Collision detection (needs currentMap)
-                    const map = (typeof currentMap !== 'undefined') ? currentMap : null;
-                    let canMove = true;
-                     if (map && (map.isOutsideBounds(nextPos.x, nextPos.y) || map.isObstacle(nextPos.x, nextPos.y))) {
-                         canMove = false;
-                         this.isMoving = false; // Stop if hit obstacle
-                         // Maybe play a bump sound?
-                     }
-                    // Add collision with other units if necessary...
-
-                    if (canMove) {
-                        this.pos = nextPos; // Update position
-                        moved = true;
-                         // Play step sound periodically
-                         const now = millis();
-                         if (now - this.lastStepSoundTime > 350) {
-                              // if (typeof playSound === 'function') playSound('step'); // Optional step sound
-                              this.lastStepSoundTime = now;
-                         }
-                    }
-                } else {
-                     this.isMoving = false; // Very close, stop moving
-                }
-             } else {
-                 console.error("p5.Vector not available for player movement.");
-                 this.isMoving = false;
-             }
-        }
-
-        // --- Passive Updates ---
-        // MP Regen (ensure frameCount is available)
-        if (typeof frameCount !== 'undefined' && frameCount % 180 === 0) { // Every 3 seconds (at 60fps)
-            if (this.stats.mp < this.currentStats.maxMP) {
-                 this.stats.mp = min(this.currentStats.maxMP, this.stats.mp + 1);
-            }
-        }
-
-        return moved; // Return true if player position changed this frame
-    }
-
-    render(offsetX, offsetY) {
-        // Ensure p5 drawing functions are available
-        if (typeof push !== 'function') return;
-
-        push();
-        translate(this.pos.x - offsetX, this.pos.y - offsetY);
-
-        // Draw the player icon
-        this.drawPlayerIcon();
-
-        // Optional: Selection indicator or health bar over player?
-        // drawHealthBar(this.stats.hp, this.currentStats.maxHP, -this.size/2, -this.size*0.7, this.size, 5);
-
-        pop();
-    }
-
-    // Method to draw the player's visual representation
-    drawPlayerIcon() {
-         // Ensure p5 drawing functions are available
-        if (typeof push !== 'function') return;
-
-        push();
-        // Rotate player to face movement direction (or mouse?)
-        // Simplified: No rotation for now, or face targetPos if moving
-        if (this.isMoving && typeof atan2 === 'function') {
-             rotate(atan2(this.targetPos.y - this.pos.y, this.targetPos.x - this.pos.x) + HALF_PI); // Add HALF_PI so top points forward
-        } else {
-             rotate(PI + HALF_PI); // Default facing down
-        }
-
-
-        fill(this.color); // Main color (gold-ish)
-        stroke(40);
-        strokeWeight(1);
-        ellipse(0, 0, this.size * 0.8, this.size); // Main body (ellipse)
-
-        // Simple details (shoulders/arms)
-        fill(180); // Grey for details
-        rectMode(CENTER); // Use center mode for easier positioning
-        rect(-this.size * 0.3, 0, this.size * 0.2, this.size * 0.5, 2); // Left shoulder/arm
-        rect(this.size * 0.3, 0, this.size * 0.2, this.size * 0.5, 2); // Right shoulder/arm
-
-        // Simple "face" or front indicator
-        fill(0);
-        ellipse(0, -this.size * 0.2, this.size * 0.1, this.size * 0.15); // Small "eye" area
-
-        pop();
-    }
-}
-
-
-// =============================================
-// FILE: monster.js
-// =============================================
-console.log("Loading: monster.js");
-class Monster {
-    constructor(monsterId, x, y) {
-        const data = (typeof MonsterData !== 'undefined') ? MonsterData[monsterId] : null;
-        if (!data) {
-            console.error("Cannot find MonsterData for ID:", monsterId);
-            // Create a placeholder/invalid monster state?
-            this.id = 'invalid_monster';
-            this.name = 'Error Monster';
-            this.pos = createVector(x, y);
-            this.size = TILE_SIZE;
-            this.color = [255,0,255]; // Magenta for error
-            this.state = 'dead'; // Mark as dead immediately
-            this.stats = { hp: 0 };
-            this.baseStats = { maxHP: 0 };
-            this.currentStats = { attackRangeSq: 0, aggroRangeSq: 0 };
-            this.invalid = true;
-            return;
-        }
-        this.id = monsterId;
-        this.name = data.name;
-        this.pos = createVector(x, y);
-        this.size = data.size || TILE_SIZE * 0.8;
-        this.color = data.color || [255, 0, 0];
-        this.icon = data.icon || 'default_monster';
-        this.attackType = data.attackType || 'melee';
-        this.invalid = false;
-
-        // Deep copy base stats if they might contain nested objects/arrays
-        this.baseStats = JSON.parse(JSON.stringify({
-            maxHP: data.hp || 10,
-            maxMP: data.mp || 0,
-            attack: data.attack || 1,
-            defense: data.defense || 0,
-            speed: data.speed || 1,
-            attackRangeSq: (data.attackRange || TILE_SIZE * 1.5) ** 2, // Store squared
-            aggroRangeSq: (data.aggroRange || TILE_SIZE * 5) ** 2,   // Store squared
-            projectileType: data.projectileType,
-            projectileSpeed: data.projectileSpeed,
-            projectileDamage: data.projectileDamage || data.attack || 1 // Default projectile damage
-        }));
-        // Current stats can be shallow copy, recalculated as needed
-        this.currentStats = { ...this.baseStats };
-        this.stats = { hp: this.baseStats.maxHP, mp: this.baseStats.maxMP };
-
-        this.xpReward = data.xp || 0;
-        this.lootTable = data.lootTable || [];
-
-        this.target = null;
-        this.state = 'idle'; // Possible states: 'idle', 'wandering', 'chasing', 'attacking_melee', 'attacking_ranged', 'dead'
-        this.lastAttackTime = 0;
-        this.attackCooldown = (this.attackType === 'ranged' ? 2500 : 1500) + random(-200, 200); // Add some variance
-        this.wanderTarget = null;
-        this.lastWanderTime = 0;
-        this.wanderCooldown = random(3000, 8000); // Time between wander attempts
-    }
-
-    takeDamage(damage, attacker) {
-        if (this.state === 'dead' || this.invalid) return;
-
-        // Ensure stats exist
-        if (!this.stats) { this.stats = { hp: 0 }; }
-        if (!this.baseStats) { this.baseStats = { maxHP: 0 }; }
-
-        this.stats.hp -= damage;
-        // Use uiManager safely
-        if (typeof uiManager !== 'undefined' && typeof uiManager.addFloatingText === 'function') {
-            uiManager.addFloatingText(`-${damage}`, this.pos.x + random(-5, 5), this.pos.y + random(-10, 0), 'yellow', 1000);
-        } else {
-            console.log(`${this.name} took ${damage} damage.`);
-        }
-
-         // Add flash effect safely
-         if (typeof visualEffects !== 'undefined') {
-             let effect = { type: 'flash', target: this, color: color(255, 255, 255, 100), duration: 150, startTime: millis() };
-              visualEffects.push(effect);
-         }
-          // if (typeof playSound === 'function') playSound('monsterHit'); // Optional sound
-
-        if (this.stats.hp <= 0) {
-            this.die(attacker);
-        } else {
-             // Aggro logic: Target the attacker if not already targeting someone,
-             // or switch to player if attacked by player.
-             const globalPlayer = (typeof player !== 'undefined') ? player : null;
-             if (!this.target || (attacker === globalPlayer && this.target !== globalPlayer)) {
-                 // If idle/wandering, start chasing immediately
-                 if (this.state === 'idle' || this.state === 'wandering') {
-                      this.target = attacker;
-                      this.state = 'chasing';
-                      this.wanderTarget = null; // Stop wandering
-                 }
-                 // If already chasing/attacking someone else but player hit us, switch target to player
-                 else if (attacker === globalPlayer) {
-                      this.target = attacker;
-                      this.state = 'chasing'; // Re-evaluate distance/state
-                 }
-                 // Otherwise, keep current target unless specifically hit by player
-             }
-        }
-    }
-
-    die(killer) {
-        if (this.state === 'dead' || this.invalid) return;
-        this.state = 'dead';
-        this.stats.hp = 0; // Ensure HP is zero
-        const killerName = (killer && killer.name) ? killer.name : 'the environment';
-        console.log(`${this.name} was slain by ${killerName}!`);
-        // if (typeof playSound === 'function') playSound('monsterDeath');
-
-        // Grant XP to killer if it has gainXP method
-        if (killer && typeof killer.gainXP === 'function') {
-            killer.gainXP(this.xpReward);
-        }
-        this.dropLoot(); // Drop items
-    }
-
-    dropLoot() {
-        // Ensure Item, DroppedItem, worldItems exist
-        if (typeof Item === 'undefined' || typeof DroppedItem === 'undefined' || typeof worldItems === 'undefined') {
-             console.error("Cannot drop loot: Required classes or arrays missing.");
-             return;
-        }
-
-        this.lootTable.forEach(loot => {
-            if (random() < loot.chance) { // Assumes random() exists
-                const itemInstance = new Item(loot.itemId); // Item constructor handles invalid IDs
-                if (itemInstance && !itemInstance.invalid) {
-                    // Add slight random offset to drop position
-                    const dropX = this.pos.x + random(-TILE_SIZE*0.2, TILE_SIZE*0.2);
-                    const dropY = this.pos.y + random(-TILE_SIZE*0.2, TILE_SIZE*0.2);
-                    const droppedItem = new DroppedItem(itemInstance, dropX, dropY);
-                    if (droppedItem && !droppedItem.invalid) {
-                        worldItems.push(droppedItem);
-                        // Optional message (can get spammy)
-                        // if (typeof uiManager !== 'undefined') uiManager.addMessage(`${UIText.itemDropped}: ${itemInstance.name}`, 'lightblue');
-                    }
-                }
-            }
-        });
-    }
-
-     attack(target) {
-          // Basic checks
-          if (!target || !target.stats || target.stats.hp <= 0 || this.state === 'dead' || this.invalid) {
-              this.target = null;
-              this.state = 'idle'; // Go back to idle if target is invalid/dead
-              return;
-          }
-          const now = millis();
-          if (now - this.lastAttackTime >= this.attackCooldown) {
-              if (this.attackType === 'melee') {
-                  // Melee attack logic
-                  const targetDefense = (target.currentStats && target.currentStats.defense !== undefined) ? target.currentStats.defense : 0;
-                  let damage = max(1, this.currentStats.attack - targetDefense);
-                  damage = floor(random(damage * 0.9, damage * 1.1));
-
-                   // Target take damage safely
-                   if (typeof target.takeDamage === 'function') target.takeDamage(damage, this);
-                   // Add melee visual effect safely
-                   if (typeof visualEffects !== 'undefined') {
-                        let effect = { type: 'line', start: this.pos.copy(), end: target.pos.copy(), color: color(200,200,200, 180), duration: 100, startTime: now };
-                        visualEffects.push(effect);
-                   }
-                    // if (typeof playSound === 'function') playSound('monsterAttackMelee');
-
-              } else if (this.attackType === 'ranged') {
-                   // Ranged attack - create projectile
-                   // Ensure Projectile class and projectiles array exist
-                   if (typeof Projectile !== 'undefined' && typeof projectiles !== 'undefined') {
-                       let proj = new Projectile(
-                            this.pos.x, this.pos.y,
-                            target.pos.x, target.pos.y, // Target current position
-                            this.currentStats.projectileSpeed || 5,
-                            this.currentStats.projectileDamage || this.currentStats.attack, // Use specific or fallback damage
-                            this, // Owner
-                            this.currentStats.projectileType || 'arrow' // Type
-                       );
-                       projectiles.push(proj);
-                        // if (typeof playSound === 'function') playSound('monsterAttackRanged');
-                   } else {
-                       console.error("Cannot fire projectile: Projectile class or array missing.");
-                   }
-              }
-
-              this.lastAttackTime = now; // Reset cooldown timer
-
-              // Check if target died after attack
-              if (target.stats.hp <= 0) {
-                  this.target = null;
-                  this.state = 'idle';
-              }
-          }
-     }
-
-
-    update(player, npcs, obstacles) { // obstacles is likely the map or grid
-        if (this.state === 'dead' || this.invalid) return;
-
-        // Ensure player and npcs are valid arrays/objects
-        const globalPlayer = (typeof player !== 'undefined' && player.stats && player.stats.hp > 0) ? player : null;
-        const validNpcs = ((typeof npcs !== 'undefined') ? npcs : []).filter(npc => npc && npc.canFight && npc.state !== 'dead' && npc.stats && npc.stats.hp > 0);
-
-        let potentialTargets = [];
-        if (globalPlayer) potentialTargets.push(globalPlayer);
-        potentialTargets = potentialTargets.concat(validNpcs);
-
-        // --- Target Acquisition & State ---
-        let closestTarget = null;
-        let minDistSq = Infinity; // Start with infinity to find the true closest
-
-         // 1. Check current target validity and distance
-         if (this.target) {
-             // Ensure target is still valid (alive, exists)
-              const targetStillValid = potentialTargets.includes(this.target);
-              if (!targetStillValid || !this.target.stats || this.target.stats.hp <= 0) {
-                  this.target = null; // Target died or became invalid
-                  this.state = 'idle';
-              } else {
-                  // Target is still valid, check distance
-                   minDistSq = distSq(this.pos.x, this.pos.y, this.target.pos.x, this.target.pos.y);
-                   closestTarget = this.target; // Assume current target is still the closest for now
-
-                   // Check if target moved too far away (lost aggro)
-                   // Use aggroRangeSq * multiplier (e.g., 1.5*1.5 = 2.25)
-                   if (minDistSq > this.currentStats.aggroRangeSq * 2.25) {
-                       this.target = null;
-                       this.state = 'idle';
-                        closestTarget = null; // Reset closest target
-                        minDistSq = Infinity; // Reset min distance for re-scan
-                   }
-              }
-         }
-
-         // 2. Scan for new/closer targets within aggro range
-         for (let pTarget of potentialTargets) {
-             const dSq = distSq(this.pos.x, this.pos.y, pTarget.pos.x, pTarget.pos.y);
-             // Check if within aggro range AND closer than current target (or if no current target)
-             if (dSq < this.currentStats.aggroRangeSq && dSq < minDistSq) {
-                 minDistSq = dSq;
-                 closestTarget = pTarget;
-             }
-         }
-
-        // 3. Update target and state based on findings
-        if (closestTarget) {
-             if (this.target !== closestTarget) {
-                 this.target = closestTarget; // Found a new or closer target
-                  // Switch to chasing if not already attacking/chasing
-                  if (this.state === 'idle' || this.state === 'wandering') {
-                       this.state = 'chasing';
-                       this.wanderTarget = null; // Stop wandering
-                  }
-             }
-              // If we have a target, determine state based on distance
-              if (minDistSq <= this.currentStats.attackRangeSq) {
-                   // Within attack range
-                   this.state = this.attackType === 'ranged' ? 'attacking_ranged' : 'attacking_melee';
-              } else {
-                   // Outside attack range, but within aggro range
-                   this.state = 'chasing';
-              }
-
-        } else {
-            // No target found or lost target
-             if (this.state !== 'idle' && this.state !== 'wandering') {
-                  this.state = 'idle'; // Switch back to idle if not already idle/wandering
-             }
-             this.target = null;
-        }
-
-
-        // --- Action Execution ---
-        let moved = false;
-        switch (this.state) {
-            case 'idle':
-                 // Transition to wandering after cooldown
-                 const nowWander = millis();
-                 if (nowWander - this.lastWanderTime > this.wanderCooldown) {
-                      this.state = 'wandering'; // Start wandering process
-                      this.lastWanderTime = nowWander; // Reset timer even if wander fails
-                      this.wanderCooldown = random(4000, 9000); // Reset cooldown duration
-                 }
-                break;
-            case 'wandering':
-                if (!this.wanderTarget) {
-                    // Choose a wander target
-                    const angle = random(TWO_PI);
-                    const distWander = random(TILE_SIZE * 1.5, TILE_SIZE * 4);
-                    let tryX = this.pos.x + cos(angle) * distWander;
-                    let tryY = this.pos.y + sin(angle) * distWander;
-
-                    // Check if target is valid (needs currentMap)
-                    const map = (typeof currentMap !== 'undefined') ? currentMap : null;
-                    if (map && !map.isObstacle(tryX, tryY) && !map.isOutsideBounds(tryX, tryY)) {
-                        this.wanderTarget = createVector(tryX, tryY);
-                    } else {
-                         // Failed to find wander target, reset state to idle to try again later
-                         this.state = 'idle';
-                    }
-                }
-
-                if (this.wanderTarget) {
-                     // Move towards wander target (pass monsters array for collision)
-                     const globalMonsters = (typeof monsters !== 'undefined') ? monsters : [];
-                    moved = this.moveTowards(this.wanderTarget, obstacles, globalMonsters);
-                    // Check if reached destination or got stuck
-                    if (!moved || distSq(this.pos.x, this.pos.y, this.wanderTarget.x, this.wanderTarget.y) < (this.currentStats.speed * 0.8)**2) {
-                        this.wanderTarget = null; // Clear target
-                        this.state = 'idle'; // Return to idle after wandering completes/fails
-                    }
-                } else {
-                     this.state = 'idle'; // If no target could be set, go back to idle
-                }
-                break;
-
-            case 'chasing':
-                if (this.target) {
-                    const globalMonsters = (typeof monsters !== 'undefined') ? monsters : [];
-                    moved = this.moveTowards(this.target.pos, obstacles, globalMonsters);
-                     // If movement failed (e.g., stuck), maybe transition back to idle temporarily?
-                     // if (!moved) { this.state = 'idle'; this.lastWanderTime = millis(); } // Simple stuck logic
-                } else {
-                     this.state = 'idle'; // Should not happen if target finding logic is correct
-                }
-                break;
-
-             case 'attacking_melee':
-             case 'attacking_ranged': // Combine attack states slightly
-                  if (this.target) {
-                       // Check if target moved out of attack range
-                       const distToTargetSq = distSq(this.pos.x, this.pos.y, this.target.pos.x, this.target.pos.y);
-                       // Use a small buffer for melee, strict for ranged
-                       const effectiveAttackRangeSq = this.attackType === 'melee' ? this.currentStats.attackRangeSq * 1.44 : this.currentStats.attackRangeSq;
-
-                       if (distToTargetSq > effectiveAttackRangeSq) {
-                           this.state = 'chasing'; // Target moved away, chase again
-                       } else {
-                           // In range, attack!
-                            this.attack(this.target); // Attack method handles cooldown
-                            moved = false; // Usually don't move while attacking
-
-                            // Optional: Ranged units might try to maintain distance (kiting)
-                            // if (this.attackType === 'ranged' && distToTargetSq < (TILE_SIZE * 2)**2) {
-                            //    // Move away from target slightly? Complex.
-                            // }
-                       }
-                  } else {
-                       this.state = 'idle'; // Target lost/died
-                  }
-                 break;
-        }
-    }
-
-    moveTowards(targetPosVec, obstacles, otherMonsters) {
-         if (!targetPosVec || this.invalid) return false; // Safety check
-         // Ensure p5.Vector is available
-         if (typeof p5 === 'undefined' || typeof p5.Vector === 'undefined') return false;
-
-         let moveVec = p5.Vector.sub(targetPosVec, this.pos);
-         if (moveVec.magSq() < (this.currentStats.speed * 0.1)**2) return false; // Already close enough
-
-         moveVec.setMag(this.currentStats.speed);
-         let nextPos = p5.Vector.add(this.pos, moveVec);
-
-         // --- Collision Detection ---
-         let blocked = false;
-         const map = (typeof currentMap !== 'undefined') ? currentMap : null;
-
-         // 1. Map obstacles and bounds
-         if (map && (map.isObstacle(nextPos.x, nextPos.y) || map.isOutsideBounds(nextPos.x, nextPos.y))) {
-              blocked = true;
-         }
-
-         // 2. Other monsters (basic circle collision avoidance)
-          if (!blocked) {
-               // Ensure otherMonsters is an array
-               const others = Array.isArray(otherMonsters) ? otherMonsters : [];
-               for (let other of others) {
-                    // Check if other is valid, not self, and not dead
-                    if (other && other !== this && other.state !== 'dead' && other.pos && other.size) {
-                         // Simple distance check between centers
-                          const minDistSq = ((this.size / 2 + other.size / 2) * 0.8)**2; // Use 80% of combined radii
-                          if (distSq(nextPos.x, nextPos.y, other.pos.x, other.pos.y) < minDistSq) {
-                              blocked = true;
-                              break; // Blocked by one monster is enough
-                          }
-                    }
-               }
-          }
-
-         // --- Movement Execution or Avoidance ---
-         if (!blocked) {
-              // No collision, move normally
-              this.pos = nextPos;
-              return true;
-         } else {
-              // Blocked, try simple avoidance (slide along obstacle/monster)
-              // This is basic: Try moving only horizontally or only vertically towards the target
-              let moveX = createVector(moveVec.x, 0);
-              let moveY = createVector(0, moveVec.y);
-              let nextPosX = p5.Vector.add(this.pos, moveX.setMag(this.currentStats.speed));
-              let nextPosY = p5.Vector.add(this.pos, moveY.setMag(this.currentStats.speed));
-
-               let canMoveX = map && !map.isObstacle(nextPosX.x, nextPosX.y) && !map.isOutsideBounds(nextPosX.x, nextPosX.y);
-               let canMoveY = map && !map.isObstacle(nextPosY.x, nextPosY.y) && !map.isOutsideBounds(nextPosY.x, nextPosY.y);
-
-               // Simplistic: Prefer Y movement if both are possible? Or prioritize the direction closer to the target?
-               // Let's try moving in the axis that wasn't the primary cause of the blockage (guesswork)
-               // Or, just try Y first, then X.
-               if (canMoveY && abs(moveVec.y) > abs(moveVec.x) * 0.5) { // Prioritize if Y component is significant
-                     // Check Y move against monsters
-                     let blockedY = false;
-                     const others = Array.isArray(otherMonsters) ? otherMonsters : [];
-                     for(let other of others) { if (other && other !== this && other.state !== 'dead' && other.pos && other.size && distSq(nextPosY.x, nextPosY.y, other.pos.x, other.pos.y) < ((this.size / 2 + other.size / 2) * 0.8)**2) { blockedY = true; break; } }
-                     if (!blockedY) { this.pos = nextPosY; return true; }
-               }
-               if (canMoveX && abs(moveVec.x) > abs(moveVec.y) * 0.5) { // Then try X if Y failed or wasn't suitable
-                    let blockedX = false;
-                    const others = Array.isArray(otherMonsters) ? otherMonsters : [];
-                     for(let other of others) { if (other && other !== this && other.state !== 'dead' && other.pos && other.size && distSq(nextPosX.x, nextPosX.y, other.pos.x, other.pos.y) < ((this.size / 2 + other.size / 2) * 0.8)**2) { blockedX = true; break; } }
-                    if (!blockedX) { this.pos = nextPosX; return true; }
-               }
-
-               // If both simple slides fail, return false (stuck)
-               return false;
-         }
-     }
-
-
-    render(offsetX, offsetY) {
-         if (this.invalid) return; // Don't render invalid monsters
-         // Ensure p5 drawing functions are available
-         if (typeof push !== 'function') return;
-
-        push();
-        translate(this.pos.x - offsetX, this.pos.y - offsetY);
-
-        if (this.state === 'dead') {
-             // Draw dead state (e.g., rotated, tinted grey)
-             push();
-              if (typeof tint === 'function') tint(150, 150); // Apply grey tint
-               // Optional: Rotate to show fallen state
-              rotate(PI / 2 + random(-0.1, 0.1)); // Rotate 90 degrees + slight variance
-              this.drawMonsterIcon(); // Draw the icon (will be tinted)
-              if (typeof noTint === 'function') noTint(); // Remove tint for subsequent drawings
-             pop();
-        } else {
-            // Draw alive state
-            this.drawMonsterIcon(); // Draw the standard icon
-
-            // Draw health bar if HP < MaxHP
-            if (this.stats && this.baseStats && this.stats.hp < this.baseStats.maxHP && typeof drawHealthBar === 'function') {
-                const barWidth = this.size * 1.1;
-                const barHeight = 5;
-                const barY = -this.size * 0.7; // Position above the icon
-                drawHealthBar(this.stats.hp, this.baseStats.maxHP, -barWidth / 2, barY, barWidth, barHeight); // Use default colors
-            }
-
-            // Optional: Draw state indicator (e.g., '!' if chasing)
-            // if(this.state === 'chasing') { fill(255,0,0); textSize(16); text('!', 0, -this.size * 0.8); }
-        }
-
-        pop(); // Restore global drawing state
-    }
-
-     // --- Method to draw specific monster icon ---
-     drawMonsterIcon() {
-         // Ensure p5 drawing functions are available
-        if (typeof push !== 'function') return;
-
-         push();
-         noStroke();
-         rectMode(CENTER); // Set rectMode for consistency within this method
-
-         switch (this.icon) {
-             case 'goblin':
-                 fill(34, 139, 34); // Dark green skin
-                 ellipse(0, 0, this.size * 0.9, this.size); // Body
-                 fill(255, 255, 0); // Yellow eyes
-                 ellipse(-this.size * 0.2, -this.size * 0.1, this.size * 0.15, this.size * 0.15); // Left eye
-                 ellipse(this.size * 0.2, -this.size * 0.1, this.size * 0.15, this.size * 0.15); // Right eye
-                 fill(139, 69, 19); // Brown club
-                 rect(this.size * 0.35, 0, this.size * 0.15, this.size * 0.6, 2); // Simple club shape
-                 break;
-             case 'skeleton':
-                 fill(220); // Bone white
-                 rect(0, this.size * 0.1, this.size * 0.3, this.size * 0.6, 1); // Torso
-                 ellipse(0, -this.size * 0.25, this.size * 0.4, this.size * 0.4); // Head
-                 fill(0); // Black eye sockets
-                 ellipse(-this.size * 0.1, -this.size * 0.25, this.size * 0.1, this.size * 0.1);
-                 ellipse(this.size * 0.1, -this.size * 0.25, this.size * 0.1, this.size * 0.1);
-                 // Simple arms (lines)
-                 stroke(200); strokeWeight(max(1, this.size * 0.05)); // Scale stroke weight
-                 line(-this.size * 0.15, 0, -this.size * 0.4, -this.size * 0.1); // Left arm
-                 line(this.size * 0.15, 0, this.size * 0.4, -this.size * 0.1); // Right arm (holding bow implied)
-                 noStroke(); // Reset stroke
-                 break;
-             case 'bat':
-                 fill(60); // Dark grey
-                 ellipse(0, 0, this.size, this.size * 0.6); // Body
-                 // Simple triangular wings
-                 triangle(-this.size * 0.1, -this.size * 0.1, -this.size * 0.5, -this.size * 0.5, -this.size * 0.8, this.size * 0.1);
-                 triangle(this.size * 0.1, -this.size * 0.1, this.size * 0.5, -this.size * 0.5, this.size * 0.8, this.size * 0.1);
-                 fill(255, 0, 0); // Red eye
-                 ellipse(0, -this.size * 0.1, this.size * 0.1, this.size * 0.1);
-                 break;
-             default: // Default fallback icon
-                 fill(this.color || color(128)); // Use monster color or grey
-                 ellipse(0, 0, this.size, this.size);
-                 fill(0);
-                 ellipse(0, 0, this.size * 0.1, this.size * 0.1); // Simple dot
-         }
-         pop(); // Restore drawing state
-     }
-}
-
-
-// =============================================
-// FILE: npc.js
-// =============================================
-console.log("Loading: npc.js");
-class Npc {
-    constructor(npcId, x, y) {
-        const data = (typeof NpcData !== 'undefined') ? NpcData[npcId] : null;
-        if (!data) {
-            console.error("Cannot find NpcData for ID:", npcId);
-            this.id = 'invalid_npc';
-            this.name = 'Error NPC';
-            this.pos = createVector(x, y);
-            this.size = TILE_SIZE;
-            this.color = [255,0,255];
-            this.state = 'dead';
-            this.stats = { hp: 0 };
-            this.baseStats = { maxHP: 0 };
-            this.invalid = true;
-            return;
-        }
-        this.id = npcId;
-        this.name = data.name;
-        this.pos = createVector(x, y);
-        this.size = data.size || TILE_SIZE * 0.9;
-        this.color = data.color || [0, 0, 255];
-        this.icon = data.icon || 'default_npc';
-        this.dialogue = data.dialogue || [`Greetings from ${this.name}.`];
-        this.canFight = data.canFight || false;
-        this.invalid = false;
-
-        this.baseStats = JSON.parse(JSON.stringify({
-            maxHP: data.hp || 50,
-            attack: data.attack || 0,
-            defense: data.defense || 0,
-            speed: data.speed || 1, // NPC movement speed
-            attackRangeSq: (data.attackRange || TILE_SIZE * 1.5) ** 2,
-            aggroRangeSq: (data.aggroRange || TILE_SIZE * 4) ** 2,
-        }));
-         this.pursuitRangeMultiplier = data.pursuitRangeMultiplier || 1.0; // How far beyond aggro range they pursue
-        this.currentStats = { ...this.baseStats }; // Shallow copy ok
-        this.stats = { hp: this.baseStats.maxHP };
-
-        this.targetEnemy = null;
-        this.state = 'idle'; // 'idle', 'fighting', 'moving_to_interact', 'dead'
-        this.lastAttackTime = 0;
-        this.attackCooldown = (data.attackCooldown || 2000) + random(-100, 100); // Attack speed
-    }
-
-    interact(player) { // player is the one interacting
-         // Use uiManager safely
-         if (typeof uiManager !== 'undefined' && typeof uiManager.addMessage === 'function') {
-             // Select random dialogue safely
-             const msg = randomFromArray(this.dialogue) || `Hello, I am ${this.name}.`;
-             uiManager.addMessage(`${this.name}: "${msg}"`, 'cyan', 4000);
-         } else {
-             console.log(`${this.name} interacts with ${player.name}`);
-         }
-        // if (typeof playSound === 'function') playSound('npcInteract'); // Optional sound
-
-        // Future: Open trade window, quest dialog, etc.
-        // Example: if(this.id === 'merchant') { uiManager.openTradeWindow(this); }
-    }
-
-     takeDamage(damage, attacker) {
-         if (this.state === 'dead' || this.invalid) return;
-         if (!this.stats) { this.stats = { hp: 0 }; } // Safety init
-
-         this.stats.hp -= damage;
-         // Use uiManager safely
-        if (typeof uiManager !== 'undefined' && typeof uiManager.addFloatingText === 'function') {
-            uiManager.addFloatingText(`-${damage}`, this.pos.x + random(-5, 5), this.pos.y + random(-10, 0), 'orange', 1000);
-         } else {
-             console.log(`${this.name} took ${damage} damage.`);
-         }
-
-         // Add flash effect safely
-          if (typeof visualEffects !== 'undefined') {
-               let effect = { type: 'flash', target: this, color: color(200, 100, 0, 100), duration: 150, startTime: millis() };
-               visualEffects.push(effect);
-          }
-           // if (typeof playSound === 'function') playSound('npcHit'); // Optional sound
-
-         if (this.stats.hp <= 0) {
-             this.die(attacker);
-         } else {
-             // If NPC can fight and was attacked by a Monster
-             if (this.canFight && attacker instanceof Monster) {
-                 // Target the attacker if no current target, or prioritize attacker if it's closer?
-                 // Simple: always target the last monster that hit us if we can fight.
-                 this.targetEnemy = attacker;
-                 if (this.state !== 'fighting') { // Switch to fighting state if not already
-                      this.state = 'fighting';
-                      console.log(`${this.name} is now fighting ${attacker.name}!`);
-                 }
-             }
-         }
-     }
-
-    die(killer) {
-         if (this.state === 'dead' || this.invalid) return;
-         this.stats.hp = 0; // Ensure HP is 0
-         this.state = 'dead';
-         const killerName = (killer && killer.name) ? killer.name : 'causes unknown';
-         console.log(`NPC ${this.name} was slain by ${killerName}...`);
-         // if (typeof playSound === 'function') playSound('npcDeath');
-
-         // NPCs might respawn after a timer, or stay dead? For now, just mark dead.
-         // Maybe drop something?
-    }
-
-    attack(target) {
-        // Basic checks
-        if (!target || !target.stats || target.stats.hp <= 0 || this.state !== 'fighting' || this.invalid) {
-            this.targetEnemy = null;
-            if(this.stats.hp > 0) this.state = 'idle'; // Revert to idle if target is invalid but NPC is alive
-            return;
-        }
-        const now = millis();
-        if (now - this.lastAttackTime >= this.attackCooldown) {
-            const targetDefense = (target.currentStats && target.currentStats.defense !== undefined) ? target.currentStats.defense : 0;
-            let damage = max(1, this.currentStats.attack - targetDefense);
-            damage = floor(random(damage * 0.9, damage * 1.1));
-
-            if (typeof target.takeDamage === 'function') target.takeDamage(damage, this);
-
-            this.lastAttackTime = now;
-             // if (typeof playSound === 'function') playSound('npcAttack');
-
-             // Add attack visual effect safely
-             if (typeof visualEffects !== 'undefined') {
-                  let effect = { type: 'line', start: this.pos.copy(), end: target.pos.copy(), color: color(100,100,255, 180), duration: 100, startTime: now };
-                  visualEffects.push(effect);
-             }
-
-            // Check if target died
-            if (target.stats.hp <= 0) {
-                 console.log(`NPC ${this.name} defeated ${target.name}`);
-                 this.targetEnemy = null;
-                 this.state = 'idle'; // Go back to idle
-            }
-        }
-    }
-
-
-    update(monsters, player) { // monsters and player objects from sketch.js
-        if (this.state === 'dead' || this.invalid) return;
-
-        // Ensure monsters is an array
-        const validMonsters = (Array.isArray(monsters) ? monsters : []).filter(m => m && m.state !== 'dead' && m.stats && m.stats.hp > 0);
-
-        if (this.canFight) {
-            let closestEnemy = null;
-            let minDistSq = Infinity; // Find the absolute closest
-
-            // 1. Check current target validity
-             if(this.targetEnemy){
-                  // Check if target is still in the monsters list and alive
-                  const targetStillValid = validMonsters.includes(this.targetEnemy);
-                  if(!targetStillValid || !this.targetEnemy.stats || this.targetEnemy.stats.hp <= 0){
-                       this.targetEnemy = null;
-                       this.state = 'idle'; // Go idle if target invalid
-                  } else {
-                       // Target still valid, check distance
-                       minDistSq = distSq(this.pos.x, this.pos.y, this.targetEnemy.pos.x, this.targetEnemy.pos.y);
-                       closestEnemy = this.targetEnemy; // Assume current is closest initially
-
-                        // Check if target ran too far away (beyond pursuit range)
-                       const maxPursuitDistSq = this.currentStats.aggroRangeSq * (this.pursuitRangeMultiplier**2);
-                       if(minDistSq > maxPursuitDistSq){
-                            console.log(`${this.name} lost target ${this.targetEnemy.name} (too far).`);
-                            this.targetEnemy = null;
-                            this.state = 'idle';
-                            closestEnemy = null; // Reset for scan
-                             minDistSq = Infinity; // Reset for scan
-                       }
-                  }
-             }
-
-             // 2. Scan for new/closer enemies within aggro range
-            for (let monster of validMonsters) {
-                const dSq = distSq(this.pos.x, this.pos.y, monster.pos.x, monster.pos.y);
-                if (dSq < this.currentStats.aggroRangeSq && dSq < minDistSq) {
-                    minDistSq = dSq;
-                    closestEnemy = monster;
-                }
-            }
-
-            // 3. Update target and state
-            if (closestEnemy) {
-                 if (this.targetEnemy !== closestEnemy) {
-                      this.targetEnemy = closestEnemy;
-                      if(this.state !== 'fighting'){
-                           console.log(`NPC ${this.name} targets ${closestEnemy.name}.`);
-                           this.state = 'fighting';
-                      }
-                 }
-                 // Determine action based on distance
-                  if (minDistSq <= this.currentStats.attackRangeSq) {
-                       this.state = 'fighting'; // Ensure state is fighting
-                       this.attack(this.targetEnemy); // Attack if in range
-                  } else {
-                       // Out of attack range, but within pursuit range
-                       // Move towards enemy if pursuit is enabled
-                       if (this.pursuitRangeMultiplier > 1.0) {
-                            this.state = 'fighting'; // Still considered fighting (chasing)
-                            this.moveTowards(this.targetEnemy.pos);
-                       } else {
-                            // If not pursuing, maybe just stand ground or go idle?
-                            // Let's keep state as fighting but don't move. Attack check will fail.
-                       }
-                  }
-
-            } else {
-                 // No closest enemy found or current target lost
-                 if(this.state === 'fighting'){
-                      console.log(`${this.name} has no target, returning to idle.`);
-                      this.state = 'idle';
-                      this.targetEnemy = null;
-                 }
-            }
-        }
-
-        // --- Non-fighting behavior ---
-        if (this.state === 'idle') {
-            // Optional: Random small movements or pathing
-            // if (random() < 0.01) { // Very low chance per frame
-            //    this.wanderSlightly();
-            // }
-        }
-    }
-
-    // Simple movement towards a target vector (no collision avoidance here)
-    moveTowards(targetPosVec) {
-         if (!targetPosVec || this.invalid) return;
-         // Ensure p5.Vector and currentMap exist
-         if (typeof p5 === 'undefined' || typeof p5.Vector === 'undefined' || typeof currentMap === 'undefined') return;
-
-         let moveVec = p5.Vector.sub(targetPosVec, this.pos);
-         // Check distance to avoid jittering when close
-         if (moveVec.magSq() > (this.currentStats.speed * 0.5)**2) {
-             moveVec.setMag(this.currentStats.speed);
-             let nextPos = p5.Vector.add(this.pos, moveVec);
-             // Basic check against map obstacles
-             if(!currentMap.isObstacle(nextPos.x, nextPos.y) && !currentMap.isOutsideBounds(nextPos.x, nextPos.y)){
-                  this.pos = nextPos;
-             }
-         }
-    }
-
-    render(offsetX, offsetY) {
-         if (this.invalid) return;
-         if (typeof push !== 'function') return; // Ensure p5 render functions ready
-
-        push();
-        translate(this.pos.x - offsetX, this.pos.y - offsetY);
-
-        if (this.state === 'dead') {
-             // Draw dead state (tinted grey, maybe rotated)
-             push();
-             if (typeof tint === 'function') tint(150, 150); // Grey tint
-              // rotate(PI/2); // Optional rotation
-              this.drawNpcIcon(); // Draw tinted icon
-             if (typeof noTint === 'function') noTint(); // Remove tint
-             pop();
-        } else {
-            // Draw alive state
-            this.drawNpcIcon(); // Draw standard icon
-
-            // Draw health bar if can fight and is damaged
-            if (this.canFight && this.stats && this.baseStats && this.stats.hp < this.baseStats.maxHP) {
-                 if (typeof drawHealthBar === 'function') {
-                    const barWidth = this.size * 1.0;
-                    const barHeight = 4;
-                    const barY = -this.size * 0.6; // Above icon
-                     // Use green for NPC health
-                     drawHealthBar(this.stats.hp, this.baseStats.maxHP, -barWidth / 2, barY, barWidth, barHeight, color(50,50,50,180), color(0,200,0,220));
-                 }
-            }
-
-            // Optional: Draw name on hover or permanently?
-            // fill(240); textSize(10); textAlign(CENTER, BOTTOM);
-            // text(this.name, 0, -this.size * 0.8);
-        }
-
-        pop(); // Restore global drawing state
-    }
-
-     // --- Method to draw specific NPC icon ---
-     drawNpcIcon() {
-          if (typeof push !== 'function') return; // Ensure p5 render functions ready
-
-          push();
-          noStroke();
-          rectMode(CENTER); // Consistent rect mode
-
-          // Base body shape
-          fill(this.color || color(0,0,200)); // Use NPC color or default blue
-          rect(0, 0, this.size * 0.7, this.size, 3); // Rounded body rectangle
-
-          // Add details based on icon ID
-          switch (this.icon) {
-              case 'elder':
-                  fill(240); // White beard/hair
-                  rect(0, -this.size * 0.35, this.size * 0.6, this.size * 0.3, 2); // Hair/Top
-                  rect(0, this.size * 0.15, this.size * 0.4, this.size * 0.5, 3); // Beard
-                  fill(100, 60, 20); // Brown staff
-                  rect(this.size * 0.4, 0, this.size * 0.1, this.size * 0.9, 1); // Staff to the side
-                  break;
-              case 'guard':
-                  fill(180); // Silver/grey armor
-                  ellipse(0, -this.size * 0.4, this.size * 0.5, this.size * 0.4); // Helmet top
-                  rect(-this.size * 0.3, -this.size * 0.05, this.size * 0.25, this.size * 0.5, 2); // Left pauldron
-                  rect(this.size * 0.3, -this.size * 0.05, this.size * 0.25, this.size * 0.5, 2); // Right pauldron
-                  fill(80); // Dark weapon hilt?
-                  rect(this.size * 0.35, this.size * 0.2, this.size * 0.1, this.size * 0.6, 1); // Weapon at side
-                  break;
-              case 'farmer':
-                   fill(222, 184, 135); // Straw hat color
-                   ellipse(0, -this.size * 0.45, this.size * 0.8, this.size * 0.3); // Hat brim
-                    ellipse(0, -this.size*0.5, this.size*0.5, this.size*0.2); // Hat top
-                   fill(0, 100, 0); // Green apron/shirt
-                   rect(0, this.size*0.15, this.size*0.6, this.size*0.5, 2);
-                  break;
-              default:
-                  // Draw nothing extra for default
-                  break;
-          }
-
-           // Simple face dots (optional)
-           fill(50);
-           ellipse(-this.size*0.12, -this.size*0.25, this.size*0.08, this.size*0.08);
-           ellipse(this.size*0.12, -this.size*0.25, this.size*0.08, this.size*0.08);
-
-          pop(); // Restore drawing state
-      }
-}
-
-
-// =============================================
-// FILE: sketch.js
-// =============================================
-console.log("Loading: sketch.js");
-// --- Global Variables ---
-let player;
-let monsters = [];
-let npcs = [];
-let worldItems = [];
-let projectiles = []; // Stores active projectiles
-let visualEffects = []; // Stores temporary visual effects
-
-let villageMap;
-let wildernessMap;
-let currentMap; // Reference to the currently active map object
-
-let uiManager; // Instance of UIManager
-
-// Camera object to handle scrolling
-let camera = {
-    x: 0, y: 0,                // Top-left corner of the camera view in world coordinates
-    targetX: 0, targetY: 0,    // Target position for the camera (usually player centered)
-    lerpAmount: 0.08           // Smoothing factor for camera movement (lower = smoother)
+const STARTING_HP = { king: 4000, princess: 2000 };
+
+const SPEED_MAP = {
+  "slow": 0.8 * TILE_SIZE, // pixels per second
+  "medium": 1.2 * TILE_SIZE,
+  "fast": 1.8 * TILE_SIZE,
+  "very fast": 2.5 * TILE_SIZE,
 };
 
-// Game state management
-let gameState = 'loading'; // Possible states: 'loading', 'village', 'wilderness', 'gameOver', 'paused' ?
-let lastMonsterSpawnTime = 0; // Timer for monster spawning
+// --- 全域變數 ---
+let gameState = "MENU"; // MENU | DECK_BUILDER | BATTLE | POST_GAME
+let currentMatch = null;
+let deckBuilder = null;
+let playerDeck = []; // 玩家選擇的牌組 (CardData objects)
+let lastUsedDeck = []; // 用於 localStorage
 
-// --- Sound Variables ---
-let sounds = {};        // Object to hold loaded sound files or oscillators
-let masterVolume = 0.3; // Global volume control (0.0 to 1.0)
-let audioInitialized = false; // Flag to track if user interaction has enabled audio
+let simpleFont; // 字體
 
-// --- p5.js Preload Function ---
-// Used to load assets like images, sounds, fonts before setup() runs
+// 音效相關
+let sounds = {};
+let soundEnabled = true; // 簡易音量控制（開/關）
+
+// --- p5.js 主要函式 ---
 function preload() {
-    console.log("Preloading assets...");
-    // Example: Load actual sound files (replace oscillator setup if using files)
-    // sounds.playerAttack = loadSound('assets/sounds/player_attack.wav');
-    // sounds.playerHit = loadSound('assets/sounds/player_hit.wav');
-    // sounds.pickupItem = loadSound('assets/sounds/pickup.wav');
-    // sounds.levelUp = loadSound('assets/sounds/level_up.wav');
-    // ... etc.
-
-    // --- Fallback: Create Oscillators for basic sound feedback ---
-    // Check if p5.sound library (and p5.Oscillator) is loaded
-    if (typeof p5 !== 'undefined' && p5.Oscillator) {
-        sounds.playerAttack = new p5.Oscillator('sine');
-        sounds.playerHit = new p5.Oscillator('sawtooth');
-        sounds.monsterHit = new p5.Oscillator('square');
-        sounds.pickupItem = new p5.Oscillator('triangle');
-        sounds.levelUp = new p5.Oscillator('sine');
-        sounds.equipItem = new p5.Oscillator('sine');
-        sounds.useItem = new p5.Oscillator('triangle');
-        sounds.openInventory = new p5.Oscillator('sine');
-        sounds.closeInventory = new p5.Oscillator('sine');
-        sounds.invalidAction = new p5.Oscillator('sawtooth');
-        sounds.playerDeath = new p5.Oscillator('sawtooth');
-        sounds.monsterAttackRanged = new p5.Oscillator('square');
-
-        // Initialize oscillators (set frequency, amplitude to 0, start)
-        Object.values(sounds).forEach((osc, index) => {
-            if (osc instanceof p5.Oscillator) {
-                 // Assign somewhat distinct frequencies
-                 osc.freq(220 + index * 55); // Start at A3 and go up in approx fourths
-                 osc.amp(0); // Start silent
-                 osc.start();
-            }
-        });
-
-         // Fine-tune specific sounds
-         if (sounds.pickupItem) sounds.pickupItem.freq(880); // Higher pitch for pickup
-         if (sounds.levelUp) sounds.levelUp.freq(660); // Pleasant interval for level up
-         if (sounds.playerHit) sounds.playerHit.freq(165); // Lower pitch for player hit
-         if (sounds.playerDeath) sounds.playerDeath.freq(82); // Very low for death
-         if (sounds.invalidAction) sounds.invalidAction.freq(110);
-
-    } else {
-        console.warn("p5.sound or p5.Oscillator not available. Sound effects disabled.");
-    }
-
-    console.log("Preload complete.");
+  // 若有外部資源（如字體），在此載入
+  // simpleFont = loadFont('assets/your_font.ttf'); // 範例，本專案不使用外部字體
 }
 
-// --- Play Sound Helper Function ---
-// Safely plays a sound oscillator for a short duration
-function playSound(soundName, duration = 0.1, volume = 0.8) {
-     // Check if sound exists, audio context is running, and it's an oscillator
-     if (sounds[soundName] && audioInitialized && sounds[soundName] instanceof p5.Oscillator && typeof sounds[soundName].amp === 'function') {
-         // Ramp amplitude up quickly, then ramp down after duration
-         sounds[soundName].amp(volume * masterVolume, 0.01); // Attack time 0.01s
-         // Schedule the amplitude ramp down
-         sounds[soundName].amp(0, 0.1, duration); // Release time 0.1s, start after 'duration' seconds
-     } else if (!audioInitialized) {
-         // console.log("Audio not initialized, skipping sound:", soundName); // Avoid spamming console
-     }
-}
-
-// --- Initialize Audio Context ---
-// Must be called after user interaction (e.g., mouse press)
-function initializeAudio() {
-    if (!audioInitialized && typeof getAudioContext === 'function') {
-        const context = getAudioContext();
-        if (context.state !== 'running') {
-            context.resume().then(() => {
-                console.log("AudioContext resumed successfully.");
-                audioInitialized = true;
-                // Maybe play a confirmation sound?
-                 if (sounds.pickupItem) playSound('pickupItem', 0.05, 0.5); // Play a gentle sound
-                 // Remove the 'click to enable' message if uiManager exists
-                 if(uiManager && uiManager.systemMessages) {
-                      uiManager.systemMessages = uiManager.systemMessages.filter(msg => !msg.text.includes("enable sound"));
-                 }
-            }).catch(e => console.error("Error resuming AudioContext:", e));
-        } else {
-            audioInitialized = true; // Already running
-        }
-    }
-}
-
-
-// --- p5.js Setup Function ---
-// Runs once at the beginning of the sketch
 function setup() {
-    createCanvas(windowWidth, windowHeight); // Create canvas filling window
-    frameRate(60); // Target 60 frames per second
-    console.log("Game setup starting...");
+  createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+  frameRate(FPS_TARGET);
+  // textFont(simpleFont); // 設定預設字體
+  textAlign(CENTER, CENTER);
+  rectMode(CENTER); // 方便繪製矩形
 
-    // Instantiate UI Manager first, as other objects might use it
-    uiManager = new UIManager(); // Assumes UIManager class is defined
-
-    console.log("Generating maps...");
-    // Instantiate map classes (ensure GameMap class is defined)
-    villageMap = new GameMap(MapSettings.villageWidth, MapSettings.villageHeight, true);
-    wildernessMap = new GameMap(MapSettings.wildernessWidth, MapSettings.wildernessHeight, false);
-
-    console.log("Creating player...");
-    // Determine start position safely
-    let startPos = (villageMap && villageMap.entryPoint) ? villageMap.entryPoint : createVector(TILE_SIZE * 5, TILE_SIZE * 5); // Fallback position
-    player = new Player(startPos.x, startPos.y); // Assumes Player class is defined
-
-    console.log("Spawning initial NPCs...");
-    spawnInitialNpcs(); // Place NPCs on the village map
-
-    currentMap = villageMap; // Start in the village
-    gameState = 'village';
-    centerCameraOnPlayer(true); // Center camera immediately
-
-     if (uiManager) {
-        const welcomeText = (typeof UIText !== 'undefined' && UIText.welcome) ? UIText.welcome : "Welcome!";
-        const rareColor = (typeof getRarityP5Color === 'function') ? getRarityP5Color('rare') : color(0, 112, 255);
-        uiManager.addMessage(welcomeText, rareColor, 5000);
-
-        // Add prompt to enable audio
-        uiManager.addMessage("Click screen to enable sound", color(200, 200, 100), 10000);
-     }
-
-
-    // Give player starting items safely
-    if (player && typeof player.pickupItem === 'function' && typeof DroppedItem !== 'undefined' && typeof Item !== 'undefined') {
-        player.pickupItem(new DroppedItem(new Item('hp_potion_small', 5), 0, 0)); // Create dummy DroppedItem to add
-        player.pickupItem(new DroppedItem(new Item('rusty_sword'), 0, 0));
-        player.pickupItem(new DroppedItem(new Item('leather_armor'), 0, 0));
-        // player.pickupItem(new DroppedItem(new Item('short_bow'),0,0)); // For testing bow drops
-    }
-
-    console.log("Game setup complete. Initial state:", gameState);
-    disableRightClickContextMenu(); // Prevent browser context menu
+  // 初始化音效 (使用 p5.Oscillator)
+  if (typeof p5.Oscillator !== 'undefined') {
+    sounds.click = createSineOscillator(2000, 0.2, 0.01, 0.05); // freq, amp, attack, release
+    sounds.explosion = createSineOscillator(100, 0.5, 0.05, 0.5);
+    sounds.fanfare_win = createFanfareOscillator(0.4); // 勝利音效序列
+    sounds.deploy = createSineOscillator(800, 0.3, 0.02, 0.1);
+    sounds.hit = createSineOscillator(1500, 0.1, 0.01, 0.03);
+    sounds.unit_death = createSineOscillator(400, 0.2, 0.01, 0.2, 'noise');
+  } else {
+    console.warn("p5.sound is not available. Sound effects will be disabled.");
+    soundEnabled = false;
+  }
+  
+  loadLastUsedDeck(); // 載入上次使用的牌組
+  initGame();
 }
 
-// --- Spawn Initial NPCs ---
-// Places NPCs based on spawn points defined in the village map
-function spawnInitialNpcs(){
-     npcs = []; // Clear existing NPCs
-     // Ensure NpcData, villageMap, and Npc class exist
-     if (typeof NpcData === 'undefined' || !villageMap || typeof Npc === 'undefined') {
-          console.error("Cannot spawn NPCs: NpcData, villageMap, or Npc class missing.");
-          return;
-     }
-     const npcIds = Object.keys(NpcData);
-     if (npcIds.length === 0) {
-          console.warn("No NPC types defined in NpcData.");
-          return;
-     }
-     let npcIndex = 0;
-     if (villageMap.spawnPoints && Array.isArray(villageMap.spawnPoints)) {
-          villageMap.spawnPoints.forEach((spawnPos) => {
-              if (spawnPos) { // Ensure spawn point is valid
-                   let npcId = npcIds[npcIndex % npcIds.length]; // Cycle through available NPC types
-                   let newNpc = new Npc(npcId, spawnPos.x, spawnPos.y);
-                   if (newNpc && !newNpc.invalid) { // Check if NPC was created successfully
-                       npcs.push(newNpc);
-                       npcIndex++;
-                   }
-              }
-          });
-     }
-      console.log(`Spawned ${npcs.length} NPCs.`);
-}
-
-
-// --- p5.js Draw Function ---
-// Runs repeatedly, drawing each frame
 function draw() {
-    background(10, 10, 15); // Dark background color
+  const dt = deltaTime / 1000; // 增量時間 (秒)
 
-    // Handle loading state
-    if (gameState === 'loading') {
-        fill(200); textAlign(CENTER, CENTER); textSize(20);
-        text("Loading...", width / 2, height / 2);
-        return; // Don't draw or update anything else
-    }
+  background(50, 60, 70); // 深色背景
 
-    // Ensure essential elements exist before proceeding
-    if (!currentMap || !player || !uiManager) {
-         fill(255, 0, 0); textAlign(CENTER, CENTER); textSize(25);
-         text("ERROR: Game components missing!", width / 2, height / 2);
-         return;
-    }
+  // 根據遊戲狀態呼叫對應的更新與繪製函式
+  switch (gameState) {
+    case "MENU":
+      renderMainMenu();
+      break;
+    case "DECK_BUILDER":
+      deckBuilder.update(dt);
+      deckBuilder.draw();
+      break;
+    case "BATTLE":
+      if (currentMatch) {
+        currentMatch.update(dt);
+        currentMatch.render();
+      }
+      break;
+    case "POST_GAME":
+      renderPostGameScreen();
+      break;
+  }
 
-    // --- Update ---
-    updateCamera(); // Update camera position based on player
-
-    // Update game objects only if not paused or game over
-    if (gameState !== 'gameOver' && gameState !== 'paused') { // Add paused state if needed
-         // Update player if alive
-         let playerMoved = false;
-        if (player.stats.hp > 0) {
-            playerMoved = player.update(currentMap, monsters, npcs); // Pass necessary objects
-            if (playerMoved) {
-                checkMapTransition(); // Check if player moved onto an exit
-                checkItemPickup();    // Check if player moved near an item
-            }
-        } else if (gameState !== 'gameOver') {
-            // Player died this frame, trigger game over logic if not already triggered
-            player.die(null); // die() method now handles setting gameState
-        }
-
-         // Update Monsters (filter out very old dead ones eventually?)
-         monsters = monsters.filter(monster => {
-              if (monster && monster.state !== 'dead') {
-                   monster.update(player, npcs, monsters); // Update alive monsters
-                   return true; // Keep monster
-              } else if (monster && monster.state === 'dead') {
-                    // Optional: Remove dead monsters after a certain time?
-                    // if (millis() - (monster.deathTime || 0) < 30000) return true; // Keep for 30s
-                    return true; // Keep dead monsters for now
-              }
-              return false; // Remove invalid monsters
-         });
-
-         // Update NPCs (only if in the village)
-         if (currentMap.isVillage) {
-             npcs.forEach(npc => {
-                 if (npc && npc.state !== 'dead') {
-                     npc.update(monsters, player); // Pass monsters and player
-                 }
-             });
-         }
-
-        // Update Projectiles (filter returns false for projectiles to remove)
-        projectiles = projectiles.filter(proj => proj && proj.update(monsters, player, npcs, currentMap));
-
-        // Update Visual Effects (filter removes expired effects)
-         updateVisualEffects();
-
-        // Spawn new monsters in the wilderness
-        if (gameState === 'wilderness') {
-            spawnMonsters();
-        }
-    } // End of game update block
-
-
-    // --- Rendering --- (Order matters for layering)
-    // 1. Render Map (background)
-    currentMap.render(camera.x, camera.y, width, height);
-
-    // 2. Render World Items (on the ground)
-    worldItems.forEach(item => { if(item && !item.invalid) item.render(camera.x, camera.y); });
-
-    // 3. Render Projectiles
-    projectiles.forEach(proj => { if(proj) proj.render(camera.x, camera.y); });
-
-    // 4. Render Units (Player, Monsters, NPCs) - Sorted by Y for pseudo-depth
-     let unitsToRender = [];
-     if (player && player.stats.hp > 0) unitsToRender.push(player);
-     unitsToRender = unitsToRender.concat(monsters.filter(m => m && m.state !== 'dead'));
-     if (currentMap.isVillage) { // Only render NPCs in the village
-         unitsToRender = unitsToRender.concat(npcs.filter(n => n && n.state !== 'dead'));
-     }
-     // Sort by Y position (higher Y drawn later, appears in front)
-     unitsToRender.sort((a, b) => a.pos.y - b.pos.y);
-     unitsToRender.forEach(unit => { if(unit) unit.render(camera.x, camera.y); });
-
-    // 5. Render Dead Units (drawn over living units' feet, but under effects)
-     monsters.forEach(m => { if(m && m.state === 'dead') m.render(camera.x, camera.y); });
-     npcs.forEach(n => { if(n && n.state === 'dead') n.render(camera.x, camera.y); });
-     // Render dead player? Maybe handled by game over screen
-
-    // 6. Render Visual Effects (explosions, attack lines, etc.)
-     renderVisualEffects(camera.x, camera.y);
-
-    // 7. Render UI (always on top)
-    uiManager.render();
-
-    // --- Game Over Screen ---
-    if (gameState === 'gameOver') {
-        push();
-        fill(0, 0, 0, 200); rect(0, 0, width, height); // Dark overlay
-        fill(200, 30, 30); textSize(72); textAlign(CENTER, CENTER); textFont('Georgia');
-        text("YOU DIED", width / 2, height / 2 - 40); // Classic message
-        fill(200); textSize(24); textFont('sans-serif');
-        text("Press [R] to Restart", width / 2, height / 2 + 40);
-        pop();
-    }
-
-     // --- Debug Info (Optional) ---
-     /*
-     push();
-     fill(255); textSize(10); textAlign(LEFT, TOP); noStroke(); textFont('monospace');
-     const fr = frameRate();
-     text(`FPS: ${fr ? fr.toFixed(1) : 'N/A'}`, 10, 10);
-     const aliveMonsters = monsters.filter(m=>m && m.state !== 'dead').length;
-     text(`Monsters: ${aliveMonsters}/${monsters.length}`, 10, 25);
-     text(`Items: ${worldItems.length}`, 10, 40);
-     text(`Projectiles: ${projectiles.length}`, 10, 55);
-     text(`Effects: ${visualEffects.length}`, 10, 70);
-     text(`State: ${gameState}`, 10, 85);
-     if(player && player.pos) text(`Player Pos: ${player.pos.x.toFixed(0)}, ${player.pos.y.toFixed(0)}`, 10, 100);
-     text(`Audio: ${audioInitialized ? 'On' : 'Off'}`, 10, 115);
-     pop();
-     //*/
-} // End Draw Loop
-
-// --- Camera Control Functions ---
-function updateCamera() {
-    if (!player || !player.pos) return; // Safety check
-    // Target the center of the screen on the player
-    camera.targetX = player.pos.x - width / 2;
-    camera.targetY = player.pos.y - height / 2;
-
-    // Smoothly interpolate camera position towards the target
-    camera.x = lerp(camera.x, camera.targetX, camera.lerpAmount);
-    camera.y = lerp(camera.y, camera.targetY, camera.lerpAmount);
-
-    // Constrain camera to map boundaries
-    if (currentMap) {
-        // Ensure map dimensions are positive
-        const mapW = max(0, currentMap.mapWidthPixels);
-        const mapH = max(0, currentMap.mapHeightPixels);
-        // Ensure camera doesn't scroll beyond map edges
-        camera.x = constrain(camera.x, 0, max(0, mapW - width)); // Use max(0, ...) to handle maps smaller than screen
-        camera.y = constrain(camera.y, 0, max(0, mapH - height));
-    } else {
-         // If no map, constrain to 0,0 ?
-         camera.x = max(0, camera.x);
-         camera.y = max(0, camera.y);
-    }
+  // 顯示 FPS
+  fill(255);
+  textSize(16);
+  textAlign(LEFT, TOP);
+  text(`FPS: ${frameRate().toFixed(0)}`, 10, 10);
+  
+  // 簡易音量按鈕
+  textAlign(RIGHT, TOP);
+  text(`Sound: ${soundEnabled ? 'ON' : 'OFF'} (M to toggle)`, CANVAS_WIDTH - 10, 10);
 }
-// Immediately center camera on player (e.g., after map change)
-function centerCameraOnPlayer(immediate = false) {
-     if (!player || !player.pos) return;
-     camera.targetX = player.pos.x - width / 2;
-     camera.targetY = player.pos.y - height / 2;
-     if(immediate) {
-          camera.x = camera.targetX;
-          camera.y = camera.targetY;
-           // Apply constraints immediately
-           if (currentMap) {
-               const mapW = max(0, currentMap.mapWidthPixels);
-               const mapH = max(0, currentMap.mapHeightPixels);
-                camera.x = constrain(camera.x, 0, max(0, mapW - width));
-                camera.y = constrain(camera.y, 0, max(0, mapH - height));
-           }
-     }
-}
-
-// --- Input Handling Functions ---
 
 function mousePressed() {
-    // --- Attempt to initialize audio on first click ---
-     if (!audioInitialized) {
-         initializeAudio();
-         // Don't process game clicks on the same press that enables audio
-         // return; // Uncomment this line if you want the first click ONLY for audio
-     }
-
-    // Ignore clicks if game is over
-    if (gameState === 'gameOver') return;
-
-    // Prioritize UI clicks (inventory, equipment panels)
-    // uiManager.handleMouseClick returns true if it handled the click
-    if (uiManager && uiManager.handleMouseClick(mouseX, mouseY)) {
-         return; // UI consumed the click
-    }
-
-    // If inventory is open, clicking outside panels should close it
-    if (uiManager && uiManager.showInventory){
-          // Check if click is outside both panels
-          if (!isMouseOverPanel(uiManager.inventoryPanel) && !isMouseOverPanel(uiManager.equipmentPanel)){
-              uiManager.toggleInventory(); // Close inventory
-          }
-         return; // Don't process world clicks if inventory was open
-    }
-
-    // --- World Click Logic (if not handled by UI) ---
-    let worldMx = mouseX + camera.x;
-    let worldMy = mouseY + camera.y;
-
-    // 1. Click on Dropped Item?
-    // Check items first as they might be small and overlay monsters/npcs
-     let clickedItem = null;
-     // Increase click radius slightly compared to automatic pickup radius
-     let clickRadiusSq = PlayerDefaults.pickupRadiusSq * 1.5;
-     for (let i = worldItems.length - 1; i >= 0; i--) { // Iterate backwards for safe removal
-          let item = worldItems[i];
-          if (!item || !item.pos || item.invalid) continue;
-         if (distSq(worldMx, worldMy, item.pos.x, item.pos.y) < clickRadiusSq) {
-              // Check if already in pickup range
-              if (distSq(player.pos.x, player.pos.y, item.pos.x, item.pos.y) < player.pickupRadiusSq) {
-                   if (player.pickupItem(item)) { // Try direct pickup
-                       worldItems.splice(i, 1); // Remove if successful
-                   }
-              } else {
-                   player.moveTo(item.pos.x, item.pos.y); // Move towards item if too far
-              }
-             clickedItem = item; // Mark that an item was clicked
-             break; // Handle only one item click per press
-         }
-     }
-     if (clickedItem) return; // Item click handled
-
-    // 2. Click on Monster?
-    let clickedMonster = null;
-    for (let monster of monsters) {
-         if(!monster || monster.state === 'dead' || !monster.pos || !monster.size) continue;
-         // Use size for click check (more generous than exact pixel)
-         if (abs(worldMx - monster.pos.x) < monster.size/1.5 && abs(worldMy - monster.pos.y) < monster.size/1.5) {
-            clickedMonster = monster; break;
-         }
-    }
-    if (clickedMonster) {
-        player.setAttackTarget(clickedMonster); // Target the clicked monster
-        return; // Monster click handled
-    }
-
-    // 3. Click on NPC? (Only in village)
-     if(currentMap && currentMap.isVillage){
-         let clickedNpc = null;
-         for(let npc of npcs) {
-              if(!npc || npc.state === 'dead' || !npc.pos || !npc.size) continue;
-               if (abs(worldMx - npc.pos.x) < npc.size/1.5 && abs(worldMy - npc.pos.y) < npc.size/1.5) {
-                   clickedNpc = npc; break;
-               }
-         }
-         if(clickedNpc){
-              // Check distance for interaction
-              const interactDistSq = (TILE_SIZE * 2.5)**2; // Interaction range
-              if (distSq(player.pos.x, player.pos.y, clickedNpc.pos.x, clickedNpc.pos.y) < interactDistSq){
-                  clickedNpc.interact(player); // Interact directly if close enough
-              } else {
-                  player.moveTo(clickedNpc.pos.x, clickedNpc.pos.y); // Move towards NPC to interact
-                  // Could set an interaction target: player.interactionTarget = clickedNpc;
-              }
-              return; // NPC click handled
-         }
-     }
-
-    // 4. Click on Ground (Move)
-    // Check if the target point is walkable before initiating move
-    if (currentMap && !currentMap.isObstacle(worldMx, worldMy) && !currentMap.isOutsideBounds(worldMx, worldMy)) {
-        player.moveTo(worldMx, worldMy);
-    } else {
-         // Clicked on unwalkable terrain
-         if (typeof playSound === 'function') playSound('invalidAction');
-    }
+  // 將滑鼠事件傳遞給當前遊戲狀態的處理器
+  switch (gameState) {
+    case "MENU":
+      handleMenuClick();
+      break;
+    case "DECK_BUILDER":
+      deckBuilder.handleMousePressed(mouseX, mouseY);
+      break;
+    case "BATTLE":
+      if (currentMatch) {
+        currentMatch.handleMousePressed(mouseX, mouseY);
+      }
+      break;
+    case "POST_GAME":
+      // 按任意鍵返回主選單 (這裡用滑鼠點擊代替)
+      initGame(); // 重置遊戲並返回主選單
+      break;
+  }
 }
 
-// Handle mouse movement (primarily for tooltips)
-function mouseMoved() {
-     if (gameState === 'gameOver') return;
-     // Update UI tooltips based on mouse position
-     if (uiManager && typeof uiManager.handleMouseMove === 'function') {
-          uiManager.handleMouseMove(mouseX, mouseY);
-     }
-}
-
-// Handle key presses
+// 鍵盤事件處理
 function keyPressed() {
-    // Restart game on 'R' if game is over
-    if (gameState === 'gameOver') {
-         if (key === 'r' || key === 'R') {
-              restartGame();
-         }
-         return;
+  if (keyCode === ESCAPE) {
+    if (gameState === "BATTLE" || gameState === "DECK_BUILDER" || gameState === "POST_GAME") {
+      playSound('click');
+      initGame(); // 返回主選單
     }
+  }
+  if (key === 'm' || key === 'M') {
+    soundEnabled = !soundEnabled;
+  }
+  if (gameState === "POST_GAME") {
+     playSound('click');
+     initGame(); // 重置遊戲並返回主選單
+  }
+}
 
-    // --- In-Game Keybinds ---
-    // Toggle Inventory
-    if (key === 'i' || key === 'I') {
-        if (uiManager) uiManager.toggleInventory();
+// --- 遊戲流程函式 ---
+function initGame() {
+  gameState = "MENU";
+  currentMatch = null; // 清除先前的對戰
+  deckBuilder = new DeckBuilder(CARD_POOL);
+  if (lastUsedDeck.length === 8) {
+    deckBuilder.setSelectedDeck(lastUsedDeck.map(cardName => CARD_POOL.find(c => c.name === cardName)));
+  }
+}
+
+// --- 主選單 ---
+function renderMainMenu() {
+  fill(200);
+  textSize(64);
+  textAlign(CENTER, CENTER);
+  text("卡牌對戰遊戲", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+
+  // 開始按鈕
+  let btnX = CANVAS_WIDTH / 2;
+  let btnY = CANVAS_HEIGHT / 2 + 50;
+  let btnW = 200;
+  let btnH = 80;
+  fill(100, 200, 100);
+  rect(btnX, btnY, btnW, btnH, 10);
+  fill(0);
+  textSize(32);
+  text("開始", btnX, btnY);
+
+  textSize(16);
+  text(`版本: ${APP_VERSION}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 30);
+}
+
+function handleMenuClick() {
+  let btnX = CANVAS_WIDTH / 2;
+  let btnY = CANVAS_HEIGHT / 2 + 50;
+  let btnW = 200;
+  let btnH = 80;
+  if (mouseX > btnX - btnW/2 && mouseX < btnX + btnW/2 &&
+      mouseY > btnY - btnH/2 && mouseY < btnY + btnH/2) {
+    playSound('click');
+    gameState = "DECK_BUILDER";
+  }
+}
+
+// --- 牌組編輯畫面 (DeckBuilder Class) ---
+class DeckBuilder {
+  constructor(cardPool) {
+    this.cardPool = [...cardPool].sort((a,b) => a.elixir - b.elixir || a.name.localeCompare(b.name)); // 排序卡牌
+    this.selectedDeck = []; // 已選牌組 (CardData objects)
+    this.scrollOffset = 0;
+    this.cardDisplayHeight = 60;
+    this.cardDisplayWidth = CANVAS_WIDTH / 2 - 80; // 左側列表卡牌寬度
+    this.deckSlotSize = 80;
+
+    // UI 元素位置
+    this.listX = 0;
+    this.listY = 50;
+    this.listWidth = CANVAS_WIDTH / 2 - 20;
+    this.listHeight = CANVAS_HEIGHT - 150;
+
+    this.deckX = CANVAS_WIDTH / 2 + 20;
+    this.deckY = 50;
+    this.deckWidth = CANVAS_WIDTH / 2 - 40;
+    
+    this.confirmButton = { x: CANVAS_WIDTH - 150, y: CANVAS_HEIGHT - 80, w: 200, h: 60, text: "確認牌組" };
+  }
+
+  setSelectedDeck(deck) {
+    this.selectedDeck = deck.slice(0, 8);
+  }
+
+  update(dt) {
+    // 處理滾動 (如果用滑鼠滾輪)
+    // for simplicity, this example might omit complex scrollbar UI
+  }
+
+  addCardToDeck(cardData) {
+    if (this.selectedDeck.length < 8 && !this.selectedDeck.find(c => c.id === cardData.id)) {
+      this.selectedDeck.push(cardData);
+      playSound('click');
     }
-    // Close Inventory with Escape
-    if (keyCode === ESCAPE) { // Use keyCode for Escape
-        if (uiManager && uiManager.showInventory) {
-             uiManager.toggleInventory();
+  }
+
+  removeCardFromDeck(cardData) {
+    this.selectedDeck = this.selectedDeck.filter(c => c.id !== cardData.id);
+    playSound('click');
+  }
+
+  getAverageElixir() {
+    if (this.selectedDeck.length === 0) return 0;
+    let totalElixir = 0;
+    for (let card of this.selectedDeck) {
+        // Mirror card elixir is variable, handle if Mirror itself is in deck (not practical here for average calc)
+        if (card.special === "mirror_last_card") {
+             // For avg calculation, maybe use a base value or exclude. Let's use 3 as an average mirrored cost.
+            totalElixir += 3;
+        } else {
+            totalElixir += card.elixir;
         }
-        // Could add pause menu toggle here later
+    }
+    return (totalElixir / this.selectedDeck.length).toFixed(1);
+  }
+
+  draw() {
+    background(60, 70, 80);
+    textSize(24);
+    fill(220);
+    textAlign(CENTER, TOP);
+    text("牌組編輯", CANVAS_WIDTH / 2, 10);
+
+    // 左側：可捲動的卡牌列表
+    this.drawCardPoolList();
+
+    // 右側：已選牌組
+    this.drawSelectedDeck();
+
+    // 右下：平均聖水消耗
+    textAlign(RIGHT, BOTTOM);
+    fill(220);
+    textSize(20);
+    text(`平均聖水: ${this.getAverageElixir()}`, this.deckX + this.deckWidth - 20, CANVAS_HEIGHT - 120);
+
+    // 確認按鈕
+    fill(100, 200, 100);
+    rect(this.confirmButton.x, this.confirmButton.y, this.confirmButton.w, this.confirmButton.h, 10);
+    fill(0);
+    textSize(24);
+    textAlign(CENTER, CENTER);
+    text(this.confirmButton.text, this.confirmButton.x, this.confirmButton.y);
+    if (this.selectedDeck.length !== 8) {
+        fill(255,0,0,150);
+        rect(this.confirmButton.x, this.confirmButton.y, this.confirmButton.w, this.confirmButton.h, 10);
+        fill(255); textSize(16);
+        text("需選滿8張牌", this.confirmButton.x, this.confirmButton.y + this.confirmButton.h/2 + 15);
+    }
+  }
+
+  drawCardPoolList() {
+    const startY = this.listY;
+    const itemHeight = this.cardDisplayHeight;
+    const padding = 5;
+    const visibleItems = Math.floor(this.listHeight / (itemHeight + padding));
+
+    // 簡易滾動條 (placeholder)
+    // fill(100); rect(this.listX + this.listWidth - 10, this.listY + this.listHeight / 2, 10, this.listHeight);
+
+    for (let i = 0; i < this.cardPool.length; i++) {
+      let card = this.cardPool[i];
+      let cardY = startY + i * (itemHeight + padding) - this.scrollOffset;
+      
+      // 簡易可見性檢查
+      if (cardY + itemHeight < startY || cardY > startY + this.listHeight) {
+        continue;
+      }
+
+      // 繪製卡牌項
+      let cardColor = this.selectedDeck.find(c => c.id === card.id) ? [80,80,80] : [120,120,120];
+      fill(cardColor);
+      rect(this.listX + this.listWidth/2, cardY + itemHeight/2, this.cardDisplayWidth, itemHeight, 5);
+      
+      fill(255);
+      textSize(16);
+      textAlign(LEFT, CENTER);
+      text(`${card.name} (${card.elixir})`, this.listX + 20, cardY + itemHeight/2);
+      textAlign(RIGHT, CENTER);
+      textSize(12);
+      text(card.type, this.listX + this.listWidth - 90, cardY + itemHeight/2);
+    }
+     // 滾動提示
+    if (this.cardPool.length * (itemHeight + padding) > this.listHeight) {
+      textAlign(CENTER, BOTTOM);
+      fill(180);
+      textSize(14);
+      text("用滑鼠滾輪捲動列表", this.listX + this.listWidth / 2, this.listY + this.listHeight + 20);
+    }
+  }
+  
+  mouseWheel(event) { // p5.js specific mouseWheel event
+    if (mouseX > this.listX && mouseX < this.listX + this.listWidth &&
+        mouseY > this.listY && mouseY < this.listY + this.listHeight) {
+        const itemHeight = this.cardDisplayHeight;
+        const padding = 5;
+        const totalContentHeight = this.cardPool.length * (itemHeight + padding);
+        this.scrollOffset += event.delta;
+        this.scrollOffset = constrain(this.scrollOffset, 0, Math.max(0, totalContentHeight - this.listHeight));
+    }
+  }
+
+
+  drawSelectedDeck() {
+    textAlign(CENTER, TOP);
+    fill(220);
+    textSize(20);
+    text("已選牌組 (8張)", this.deckX + this.deckWidth / 2, this.deckY - 30);
+
+    const slotSize = this.deckSlotSize;
+    const padding = 10;
+    const cardsPerRow = 4;
+    const startX = this.deckX + (this.deckWidth - (cardsPerRow * slotSize + (cardsPerRow - 1) * padding)) / 2;
+    let currentY = this.deckY;
+
+    for (let i = 0; i < 8; i++) {
+      const row = Math.floor(i / cardsPerRow);
+      const col = i % cardsPerRow;
+      const x = startX + col * (slotSize + padding) + slotSize/2;
+      const y = currentY + row * (slotSize + padding) + slotSize/2;
+
+      if (this.selectedDeck[i]) {
+        let card = this.selectedDeck[i];
+        fill(getRarityColor(card.rarity));
+        rect(x, y, slotSize, slotSize, 8);
+        fill(0);
+        textSize(12);
+        textAlign(CENTER, CENTER);
+        text(card.name, x, y - 10, slotSize - 4);
+        textSize(16);
+        text(card.elixir, x, y + 15);
+      } else {
+        fill(80, 80, 90);
+        rect(x, y, slotSize, slotSize, 8);
+      }
+    }
+  }
+
+  handleMousePressed(mx, my) {
+    // 檢查點擊確認按鈕
+    if (mx > this.confirmButton.x - this.confirmButton.w/2 && mx < this.confirmButton.x + this.confirmButton.w/2 &&
+        my > this.confirmButton.y - this.confirmButton.h/2 && my < this.confirmButton.y + this.confirmButton.h/2) {
+      if (this.selectedDeck.length === 8) {
+        playSound('click');
+        playerDeck = [...this.selectedDeck]; // 複製一份作為玩家牌組
+        saveLastUsedDeck(playerDeck.map(c => c.name)); // 保存牌組
+        
+        currentMatch = new Match(playerDeck, generateAIRandomDeck());
+        gameState = "BATTLE";
+      } else {
+        // 提示需要選滿8張 (已在draw中處理)
+        playSound('explosion'); // 錯誤音效
+      }
+      return;
     }
 
-    // --- Debug Keys ---
-     if (key === 'l' || key === 'L') { // Level Up cheat
-          if (player && player.stats) player.gainXP(player.stats.xpToNextLevel - player.stats.xp + 1);
-     }
-     if (key === 'h' || key === 'H') { // Heal cheat
-          if (player && player.stats && player.currentStats) {
-              player.stats.hp = player.currentStats.maxHP;
-               if (uiManager) uiManager.addFloatingText("+MAX HP", player.pos.x, player.pos.y, 'lime', 1000, 18);
-          }
-     }
-     if (key === 'k' || key === 'K') { // Kill nearest monster cheat
-          let nearestMonster = monsters.filter(m=>m && m.state!=='dead' && m.pos)
-                                       .sort((a,b)=>distSq(player.pos.x,player.pos.y,a.pos.x,a.pos.y)-distSq(player.pos.x,player.pos.y,b.pos.x,b.pos.y))[0];
-          if(nearestMonster && typeof nearestMonster.takeDamage === 'function') nearestMonster.takeDamage(99999, player);
-     }
-     if (key === 't' || key === 'T') { // Teleport to village entrance cheat
-          if(villageMap && villageMap.entryPoint) {
-               if(currentMap !== villageMap) {
-                    switchMap(villageMap, villageMap.entryPoint);
-               } else {
-                    player.pos.set(villageMap.entryPoint); player.targetPos.set(villageMap.entryPoint); player.isMoving = false;
-                    centerCameraOnPlayer(true);
-               }
-          }
-     }
-     if (key === 'g' || key === 'G') { // Give random item cheat
-          if (player && typeof ItemData !== 'undefined' && typeof Item !== 'undefined' && typeof DroppedItem !== 'undefined') {
-              const itemIds = Object.keys(ItemData);
-              if (itemIds.length > 0) {
-                  const randomId = randomFromArray(itemIds); // Use utility function
-                  if(randomId){
-                       player.pickupItem(new DroppedItem(new Item(randomId, 1),0,0));
-                  }
-              }
-          }
-     }
-} // End keyPressed
+    // 檢查點擊卡牌列表
+    const itemHeight = this.cardDisplayHeight;
+    const padding = 5;
+    if (mx > this.listX && mx < this.listX + this.listWidth &&
+        my > this.listY && my < this.listY + this.listHeight) {
+      const clickIndex = Math.floor((my - this.listY + this.scrollOffset) / (itemHeight + padding));
+      if (clickIndex >= 0 && clickIndex < this.cardPool.length) {
+        this.addCardToDeck(this.cardPool[clickIndex]);
+      }
+      return;
+    }
+    
+    // 檢查點擊已選牌組
+    const slotSize = this.deckSlotSize;
+    const deckPadding = 10;
+    const cardsPerRow = 4;
+    const startXDeck = this.deckX + (this.deckWidth - (cardsPerRow * slotSize + (cardsPerRow - 1) * deckPadding)) / 2;
+    let currentYDeck = this.deckY;
 
-// --- Game Logic Helper Functions ---
-
-// Check if player is on a map transition point
-function checkMapTransition() {
-     if (!player || !player.pos || !currentMap) return; // Safety checks
-
-     // Leaving Village
-     if (currentMap.isVillage && currentMap.isOnExit(player.pos.x, player.pos.y)) {
-          if (wildernessMap && wildernessMap.entryPoint) { // Ensure destination exists
-              switchMap(wildernessMap, wildernessMap.entryPoint);
-              if (uiManager) uiManager.addMessage(UIText.leaveVillage || "Leaving village...", color(255, 180, 100), 3000);
-          } else { console.error("Cannot switch to wilderness: Map or entry point missing."); }
-     }
-     // Entering Village (from Wilderness)
-     else if (!currentMap.isVillage && currentMap.isOnVillageEntrance(player.pos.x, player.pos.y)) {
-          if (villageMap && villageMap.entryPoint) { // Ensure destination exists
-               switchMap(villageMap, villageMap.entryPoint);
-                if (uiManager) uiManager.addMessage(UIText.enterVillage || "Entering village...", color(150, 200, 255), 3000);
-          } else { console.error("Cannot switch to village: Map or entry point missing."); }
-     }
+    for (let i = 0; i < this.selectedDeck.length; i++) {
+      const row = Math.floor(i / cardsPerRow);
+      const col = i % cardsPerRow;
+      const x = startXDeck + col * (slotSize + deckPadding);
+      const y = currentYDeck + row * (slotSize + deckPadding);
+      if (mx > x && mx < x + slotSize && my > y && my < y + slotSize) {
+        this.removeCardFromDeck(this.selectedDeck[i]);
+        return;
+      }
+    }
+  }
 }
 
-// Switch the current map and reposition the player
-function switchMap(newMap, playerSpawnPoint) {
-     if (!newMap || !playerSpawnPoint) {
-          console.error("SwitchMap failed: Invalid new map or spawn point.");
-          return;
-     }
-     console.log(`Switching map to ${newMap.isVillage ? 'Village' : 'Wilderness'}`);
+// 獨立的 mouseWheel 處理函式，因為 p5.js 是這樣呼叫的
+function mouseWheel(event) {
+  if (gameState === "DECK_BUILDER" && deckBuilder) {
+    deckBuilder.mouseWheel(event);
+  }
+}
 
-     // Clear dynamic objects relevant to the outgoing map
-     projectiles = []; // Clear projectiles on any transition
-     visualEffects = []; // Clear visual effects
-     if (currentMap === wildernessMap) {
-          monsters = []; // Clear monsters when leaving wilderness
-          worldItems = []; // Clear ground items when leaving wilderness
-          lastMonsterSpawnTime = 0; // Reset spawn timer
-     } else if (currentMap === villageMap) {
-          // Reset NPC states when leaving village? Or let them persist?
-           npcs.forEach(npc => {
-                if(npc && npc.state !== 'dead') {
-                     npc.targetEnemy = null;
-                     npc.state = 'idle';
+
+// --- 對戰畫面 (BattleArena / Match Class) ---
+class Match {
+  constructor(playerDeckCards, aiDeckCards) {
+    this.players = [
+      new Player(0, playerDeckCards, true), // 人類玩家
+      new Player(1, aiDeckCards, false)     // AI 對手
+    ];
+    this.gameObjects = []; // 所有場上單位、建築、法術效果
+    this.particles = [];
+
+    this.timer = MATCH_DURATION_SECONDS;
+    this.matchPhase = "NORMAL"; // NORMAL | OVERTIME | TIEBREAKER
+    this.elixirRateMultiplier = 1;
+    this.winner = null; // null | 0 (player) | 1 (AI) | "TIE"
+    this.gameOverMessage = "";
+
+    this.lastPlayedCardPlayer = null; // For Mirror card
+    this.lastPlayedCardAI = null;
+
+    this.aiNextPlayTime = random(AI_PLAY_INTERVAL_MIN, AI_PLAY_INTERVAL_MAX);
+    
+    this.paused = false; // 可用於 ESC 暫停等
+
+    this.eventLog = []; // For replay feature (optional)
+    this.cardsPlayedCount = [0, 0]; // [player, AI]
+  }
+
+  update(dt) {
+    if (this.winner !== null) return; // 遊戲結束則停止更新
+
+    // 更新計時器和階段
+    this.timer -= dt;
+    if (this.matchPhase === "NORMAL" && this.timer <= 0) {
+      this.matchPhase = "OVERTIME";
+      this.timer = OVERTIME_DURATION_SECONDS;
+      this.elixirRateMultiplier = ELIXIR_RATE_OVERTIME / ELIXIR_RATE_NORMAL; // 規格是3倍，但這裡是用相對值
+      this.eventLog.push({time: this.getElapsedTime(), event: "OVERTIME_START"});
+      // 檢查勝利條件 (摧毀塔數)
+      this.checkTowerCountWin();
+    } else if (this.matchPhase === "OVERTIME" && this.timer <= 0) {
+      this.matchPhase = "TIEBREAKER";
+      this.timer = TIEBREAKER_DURATION_SECONDS;
+      this.eventLog.push({time: this.getElapsedTime(), event: "TIEBREAKER_START"});
+      this.checkTowerCountWin(); // 再次檢查，若平手則進入 tiebreaker
+    } else if (this.matchPhase === "TIEBREAKER") {
+      if (this.timer <= 0) {
+        this.checkTiebreakerWin(); // Tiebreaker結束，判定勝負
+      } else {
+        // 所有塔每秒損血
+        const hpLoss = TIEBREAKER_HP_LOSS_PER_SECOND * dt;
+        this.players.forEach(p => {
+          p.towers.forEach(t => {
+            if (t.hp > 0) t.takeDamage(hpLoss);
+          });
+        });
+      }
+    }
+    
+    // 更新玩家 (聖水、手牌等)
+    this.players.forEach(p => p.update(dt, this.elixirRateMultiplier));
+
+    // AI 行為
+    this.updateAI(dt);
+
+    // 更新所有遊戲物件 (單位、建築、法術)
+    for (let i = this.gameObjects.length - 1; i >= 0; i--) {
+      const obj = this.gameObjects[i];
+      obj.update(dt, this);
+      if (obj.isDestroyed || (obj.duration !== undefined && obj.duration <=0)) {
+        if(obj.cardData && obj.cardData.special === "death_damage" && obj.hp <=0) { // e.g. Balloon
+            this.spawnSpellEffect(obj.cardData, obj.pos, obj.isFriendly ? this.players[0] : this.players[1], obj.cardData.dmg / 2, obj.cardData.attackRange * 1.5); // Example death damage
+        }
+        this.gameObjects.splice(i, 1);
+        if (obj instanceof Unit) { // 播放死亡動畫
+          this.spawnParticleEffect(obj.pos, 20, obj.isFriendly ? COLOR_PLAYER : COLOR_AI, 'death');
+          playSound('unit_death');
+        }
+      }
+    }
+    
+    // 更新粒子效果
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      this.particles[i].update(dt);
+      if (this.particles[i].isFinished()) {
+        this.particles.splice(i, 1);
+      }
+    }
+    
+    // 檢查勝利條件 (即時)
+    this.checkInstantWinConditions();
+  }
+
+  updateAI(dt) {
+    const aiPlayer = this.players[1];
+    if (!aiPlayer || aiPlayer.isHuman) return;
+
+    this.aiNextPlayTime -= dt;
+    if (this.aiNextPlayTime <= 0) {
+      this.aiNextPlayTime = random(AI_PLAY_INTERVAL_MIN, AI_PLAY_INTERVAL_MAX);
+      
+      // AI 決策邏輯
+      let cardToPlay = null;
+      let availableCards = aiPlayer.hand.filter(card => card && aiPlayer.elixir >= this.getCardElixir(card, aiPlayer));
+      if (availableCards.length === 0) return;
+
+      // 策略：塔血 < 30% 優先防守，否則隨機進攻
+      let criticalTower = aiPlayer.towers.find(t => t.hp > 0 && (t.hp / t.maxHp) < AI_DEFEND_HP_THRESHOLD);
+      let playerThreats = this.gameObjects.filter(obj => obj instanceof Unit && !obj.isFriendly && obj.target && aiPlayer.towers.includes(obj.target));
+
+      if (criticalTower || playerThreats.length > 0) { // 防守邏輯
+        // 嘗試找解場牌 (例如法術對付群聚敵人，或單位放在威脅路徑上)
+        // 簡化：選擇最便宜的可用牌
+        availableCards.sort((a, b) => this.getCardElixir(a, aiPlayer) - this.getCardElixir(b, aiPlayer));
+        cardToPlay = availableCards[0];
+      } else { // 進攻邏輯
+        // 隨機選一張可用的牌
+        cardToPlay = random(availableCards);
+      }
+
+      if (cardToPlay) {
+        // 決定放置位置/目標
+        let placementPos = null;
+        let targetPos = null;
+        
+        const deployY = BRIDGE_Y_POSITION - TILE_SIZE * 1.5; // AI方橋前
+        const randomXOffset = (random() - 0.5) * (CANVAS_WIDTH / 3);
+        let spawnX = CANVAS_WIDTH / 2 + randomXOffset;
+        spawnX = constrain(spawnX, TILE_SIZE, CANVAS_WIDTH - TILE_SIZE);
+
+        if (cardToPlay.type === "troop" || cardToPlay.type === "building") {
+          placementPos = createVector(spawnX, deployY);
+          if (cardToPlay.special === "deploy_anywhere_ground" && cardToPlay.name === "鑽地礦工 Miner") { // Miner AI
+            const enemyTowers = this.players[0].towers.filter(t => t.hp > 0);
+            if (enemyTowers.length > 0) {
+                placementPos = random(enemyTowers).pos.copy(); // 放到敵人塔旁
+            } else {
+                 placementPos = createVector(spawnX, CANVAS_HEIGHT - deployY); // 深入敵陣
+            }
+          }
+        } else if (cardToPlay.type === "spell") {
+          // 選擇目標：優先打擊敵方單位密集區或塔
+          let potentialTargets = this.gameObjects.filter(obj => obj.isFriendly === false && obj.hp > 0); // Friendly to AI is Player's units
+          if (potentialTargets.length > 0) {
+            targetPos = random(potentialTargets).pos.copy();
+          } else { // 沒有單位就打塔
+            const playerTowers = this.players[0].towers.filter(t => t.hp > 0);
+            if (playerTowers.length > 0) targetPos = random(playerTowers).pos.copy();
+            else targetPos = createVector(CANVAS_WIDTH / 2, CANVAS_HEIGHT - KING_TOWER_Y_OFFSET); // 玩家國王塔位置
+          }
+          placementPos = targetPos; // 法術直接指定目標位置
+        }
+        
+        if (placementPos) {
+          this.playCard(aiPlayer, cardToPlay, placementPos, targetPos);
+        }
+      }
+    }
+  }
+
+  getCardElixir(cardData, player) {
+      if (cardData.special === "mirror_last_card") {
+          const lastCard = player.id === 0 ? this.lastPlayedCardPlayer : this.lastPlayedCardAI;
+          return lastCard ? lastCard.elixir + 1 : 99; // 99 if no last card (should not happen if mirror is playable)
+      }
+      return cardData.elixir;
+  }
+
+  playCard(player, cardData, position, targetPosition = null) {
+    const elixirCost = this.getCardElixir(cardData, player);
+    if (player.elixir < elixirCost) return false;
+
+    player.elixir -= elixirCost;
+    this.cardsPlayedCount[player.id]++;
+    playSound('deploy');
+
+    if (cardData.special === "mirror_last_card") {
+        const lastCard = player.id === 0 ? this.lastPlayedCardPlayer : this.lastPlayedCardAI;
+        if(lastCard) {
+            // Play the actual last card, not the mirror card itself
+            this.spawnGameObject(lastCard, player, position, targetPosition);
+            // Mirror itself becomes the new "last played card" for purposes of not mirroring mirror
+             if (player.id === 0) this.lastPlayedCardPlayer = cardData; else this.lastPlayedCardAI = cardData;
+        }
+    } else {
+        this.spawnGameObject(cardData, player, position, targetPosition);
+        // Update last played card (excluding Mirror itself from being mirrored immediately)
+        if (player.id === 0) this.lastPlayedCardPlayer = cardData; else this.lastPlayedCardAI = cardData;
+    }
+    
+    player.cycleCard(cardData);
+    this.eventLog.push({ time: this.getElapsedTime(), player: player.id, card: cardData.name, pos: position ? [position.x, position.y] : null });
+    return true;
+  }
+  
+  spawnGameObject(cardData, player, position, targetPosition) {
+    const isFriendly = player.isHuman; // Assuming player 0 is human and friendly
+    
+    if (cardData.type === "troop") {
+      const spawnCount = cardData.spawnCount || 1;
+      const unitIdToSpawn = cardData.spawnUnitId; // e.g. "skeleton_basic"
+      
+      for (let i = 0; i < spawnCount; i++) {
+        let spawnPos = position.copy();
+        if (spawnCount > 1) { // Simple spread for swarm units
+          spawnPos.add(random(-TILE_SIZE/2, TILE_SIZE/2), random(-TILE_SIZE/2, TILE_SIZE/2));
+        }
+
+        let unitProps;
+        if (unitIdToSpawn && UNIT_TEMPLATES[unitIdToSpawn]) { // Spawning predefined sub-units
+            unitProps = { ...UNIT_TEMPLATES[unitIdToSpawn], card_id_source: cardData.id };
+        } else { // Spawning the card itself as a unit
+            unitProps = {
+                hp: cardData.hp,
+                dmg: cardData.dmg,
+                speed: SPEED_MAP[cardData.speed] || SPEED_MAP["medium"],
+                attackRange: cardData.attackRange,
+                movementType: cardData.movementType,
+                targetType: cardData.targetType,
+                splashRadius: cardData.splashRadius,
+                special: cardData.special,
+                name: cardData.name, // For display or specific logic
+                card_id_source: cardData.id,
+                visual: { // Default visual if not in UNIT_TEMPLATES
+                    size: cardData.movementType === 'air' ? TILE_SIZE * 0.8 : TILE_SIZE,
+                    color: cardData.movementType === 'air' ? COLOR_AIR_UNIT : COLOR_GROUND_UNIT
                 }
-           });
-           worldItems = []; // Also clear village ground items? Or keep them? Let's clear for now.
-     }
-
-     currentMap = newMap; // Set the new map
-     gameState = currentMap.isVillage ? 'village' : 'wilderness'; // Update game state
-
-     // Respawn NPCs if entering the village and they aren't there
-     if (currentMap.isVillage && (!npcs || npcs.length === 0)) {
-         console.log("Respawning NPCs for village entry.");
-         spawnInitialNpcs();
-     }
-
-     // Reposition player
-     if (player && player.pos && player.targetPos) {
-         player.pos.set(playerSpawnPoint);
-         player.targetPos.set(playerSpawnPoint); // Stop any previous movement command
-         player.isMoving = false;
-         player.targetEnemy = null; // Clear attack target
-     }
-
-     centerCameraOnPlayer(true); // Snap camera to new position
-     if (uiManager && typeof uiManager.calculateLayout === 'function') {
-          uiManager.calculateLayout(); // Recalculate UI in case window size changed
-     }
-}
+            };
+        }
+        // Override some properties from cardData if it's a direct spawn
+        if (!unitIdToSpawn) {
+            unitProps.hp = cardData.hp;
+            unitProps.dmg = cardData.dmg;
+            // etc for other direct stats
+        }
 
 
-// Spawn monsters periodically in the wilderness
-function spawnMonsters() {
-     // Ensure we are in the right state and map exists
-     if (!currentMap || currentMap.isVillage || gameState !== 'wilderness' || !player || !player.pos) return;
-     // Ensure MonsterData and Monster class exist
-     if (typeof MonsterData === 'undefined' || typeof Monster === 'undefined') return;
+        const newUnit = new Unit(spawnPos.x, spawnPos.y, isFriendly, unitProps, cardData);
+        this.gameObjects.push(newUnit);
+      }
 
-     const now = millis();
-     if (now - lastMonsterSpawnTime > MapSettings.monsterSpawnInterval) {
-         lastMonsterSpawnTime = now;
-          // Count only alive monsters
-          let aliveMonsters = monsters.filter(m => m && m.state !== 'dead').length;
+    } else if (cardData.type === "building") {
+      const newBuilding = new Building(position.x, position.y, isFriendly, cardData);
+      this.gameObjects.push(newBuilding);
+    } else if (cardData.type === "spell") {
+      this.spawnSpellEffect(cardData, targetPosition || position, player, cardData.dmg, cardData.attackRange, cardData.splashRadius);
+    }
+  }
 
-         if (aliveMonsters < MapSettings.maxMonsters) {
-              // Find a spawn point far enough from the player
-             const spawnPoint = currentMap.getRandomSpawnPoint(player.pos, MapSettings.monsterSpawnCheckRadius**2);
+  spawnSpellEffect(cardData, position, casterPlayer, spellDmg, spellRange, spellSplashRadius) {
+    const spellEffect = new Spell(position.x, position.y, casterPlayer.isHuman, cardData, spellDmg, spellRange, spellSplashRadius);
+    this.gameObjects.push(spellEffect);
+    spellEffect.applyEffect(this); // Apply instant effects
+    this.spawnParticleEffect(position, 30, COLOR_SPELL_EFFECT, cardData.name.includes("Log") ? 'line' : 'circle');
+    // Play sound based on spell type
+    if (cardData.name.includes("雷擊") || cardData.name.includes("火球")) playSound('explosion');
+    else playSound('click'); // Generic spell sound
+  }
+  
+  spawnParticleEffect(pos, count, pColor, type = 'explosion') {
+      if (this.particles.length > PARTICLE_LIMIT - count) { // Limit particles for performance
+          count = Math.max(0, PARTICLE_LIMIT - this.particles.length);
+      }
+      for (let i = 0; i < count; i++) {
+          this.particles.push(new Particle(pos.x, pos.y, pColor, type));
+      }
+  }
 
-             if (spawnPoint) {
-                  // Optional: Check if spawn point is too crowded by existing monsters
-                  let tooClose = false;
-                  for(let m of monsters){
-                       if(m && m.state !== 'dead' && m.pos && distSq(spawnPoint.x, spawnPoint.y, m.pos.x, m.pos.y) < (TILE_SIZE*2)**2){ // Check within 2 tiles
-                            tooClose = true; break;
-                       }
-                  }
+  getElapsedTime() {
+    if (this.matchPhase === "NORMAL") return MATCH_DURATION_SECONDS - this.timer;
+    if (this.matchPhase === "OVERTIME") return MATCH_DURATION_SECONDS + (OVERTIME_DURATION_SECONDS - this.timer);
+    return MATCH_DURATION_SECONDS + OVERTIME_DURATION_SECONDS + (TIEBREAKER_DURATION_SECONDS - this.timer);
+  }
 
-                  if(!tooClose){
-                      // Select a random monster type
-                      const monsterIds = Object.keys(MonsterData);
-                      if (monsterIds.length > 0) {
-                          const randomMonsterId = randomFromArray(monsterIds);
-                          if (randomMonsterId) {
-                              let newMonster = new Monster(randomMonsterId, spawnPoint.x, spawnPoint.y);
-                              if (newMonster && !newMonster.invalid) {
-                                   monsters.push(newMonster);
-                              }
-                          }
-                      }
-                  } else {
-                       // console.log("Spawn point too crowded, skipping spawn.");
-                  }
-             } else {
-                  // console.log("Could not find suitable spawn point.");
+  checkInstantWinConditions() {
+    this.players.forEach((player, idx) => {
+      if (player.towers.find(t => t.isKing && t.hp <= 0)) {
+        this.winner = 1 - idx; // The other player wins
+        this.gameOverMessage = `${this.players[this.winner].name} 摧毀了國王塔，取得勝利！`;
+        this.endMatch();
+      }
+    });
+  }
+  
+  checkTowerCountWin() {
+    if (this.winner != null) return; // Already decided
+
+    const p0TowersDestroyed = this.players[0].towers.filter(t => t.hp <= 0 && !t.isKing).length;
+    const p1TowersDestroyed = this.players[1].towers.filter(t => t.hp <= 0 && !t.isKing).length;
+
+    if (this.matchPhase === "OVERTIME" || this.matchPhase === "TIEBREAKER") { // In OT/TB, any tower destruction can be a win
+        const p0KingDown = this.players[0].towers.find(t => t.isKing && t.hp <=0);
+        const p1KingDown = this.players[1].towers.find(t => t.isKing && t.hp <=0);
+
+        if (p0KingDown && !p1KingDown) { this.winner = 1; this.gameOverMessage = `${this.players[1].name} 獲勝！`; this.endMatch(); return;}
+        if (p1KingDown && !p0KingDown) { this.winner = 0; this.gameOverMessage = `${this.players[0].name} 獲勝！`; this.endMatch(); return;}
+        if (p0KingDown && p1KingDown) { this.winner = "TIE"; this.gameOverMessage = `平手！雙方國王塔同時被摧毀！`; this.endMatch(); return;} // Unlikely but possible
+
+        // Check princess towers if kings are up
+        const p0PrincessTowersAlive = this.players[0].towers.filter(t => !t.isKing && t.hp > 0).length;
+        const p1PrincessTowersAlive = this.players[1].towers.filter(t => !t.isKing && t.hp > 0).length;
+
+        if (p0PrincessTowersAlive < p1PrincessTowersAlive) {
+            this.winner = 1; this.gameOverMessage = `${this.players[1].name} 摧毀較多塔，獲勝！`; this.endMatch(); return;
+        }
+        if (p1PrincessTowersAlive < p0PrincessTowersAlive) {
+            this.winner = 0; this.gameOverMessage = `${this.players[0].name} 摧毀較多塔，獲勝！`; this.endMatch(); return;
+        }
+    }
+    
+    // If still no winner and it's the end of normal time, proceed based on HP or to next phase
+    if (this.matchPhase === "OVERTIME" && this.timer <= 0) { // End of OT, no first tower, go to Tiebreaker
+        // No specific win condition here, will go to TIEBREAKER phase if still tied
+    } else if (this.matchPhase === "NORMAL" && this.timer <=0) { // End of normal time
+        // If one player has more towers standing (fewer destroyed)
+        const p0PrincessDestroyed = this.players[0].towers.filter(t => !t.isKing && t.hp <= 0).length;
+        const p1PrincessDestroyed = this.players[1].towers.filter(t => !t.isKing && t.hp <= 0).length;
+
+        if (p0PrincessDestroyed > p1PrincessDestroyed) {
+            this.winner = 1; this.gameOverMessage = `${this.players[1].name} 摧毀較多塔，獲勝！`; this.endMatch(); return;
+        }
+        if (p1PrincessDestroyed > p0PrincessDestroyed) {
+            this.winner = 0; this.gameOverMessage = `${this.players[0].name} 摧毀較多塔，獲勝！`; this.endMatch(); return;
+        }
+        // If tower counts are equal, compare total HP of remaining towers (as a more nuanced tiebreak before overtime)
+        let p0TotalHP = this.players[0].towers.reduce((sum, t) => sum + t.hp, 0);
+        let p1TotalHP = this.players[1].towers.reduce((sum, t) => sum + t.hp, 0);
+        if (p0TotalHP < p1TotalHP) {
+             // this.winner = 1; this.gameOverMessage = `${this.players[1].name} 剩餘總血量較高，獲勝！`; this.endMatch(); return;
+             // Standard CR rules usually go to Overtime if tower counts are equal, not HP. Sticking to that.
+        } else if (p1TotalHP < p0TotalHP) {
+            // this.winner = 0; this.gameOverMessage = `${this.players[0].name} 剩餘總血量較高，獲勝！`; this.endMatch(); return;
+        }
+        // If everything is equal, it will proceed to Overtime naturally.
+    }
+  }
+
+  checkTiebreakerWin() {
+    if (this.winner != null) return;
+    let p0TotalHP = this.players[0].towers.reduce((sum, t) => sum + Math.max(0, t.hp), 0);
+    let p1TotalHP = this.players[1].towers.reduce((sum, t) => sum + Math.max(0, t.hp), 0);
+
+    if (p0TotalHP <= 0 && p1TotalHP <= 0) {
+      this.winner = "TIE";
+      this.gameOverMessage = "平手！所有塔都被摧毀了！";
+    } else if (p0TotalHP <= 0) {
+      this.winner = 1; // AI wins
+      this.gameOverMessage = `${this.players[1].name} 在 Tiebreaker 中獲勝！`;
+    } else if (p1TotalHP <= 0) {
+      this.winner = 0; // Player wins
+      this.gameOverMessage = `${this.players[0].name} 在 Tiebreaker 中獲勝！`;
+    } else { // Time up, but towers still standing
+        if (p0TotalHP < p1TotalHP) {
+            this.winner = 1;
+            this.gameOverMessage = `${this.players[1].name} 剩餘總血量較高，獲勝！`;
+        } else if (p1TotalHP < p0TotalHP) {
+            this.winner = 0;
+            this.gameOverMessage = `${this.players[0].name} 剩餘總血量較高，獲勝！`;
+        } else {
+            this.winner = "TIE";
+            this.gameOverMessage = "平手！血量相同！";
+        }
+    }
+    this.endMatch();
+  }
+
+  endMatch() {
+    if (this.winner === 0) playSound('fanfare_win');
+    else if (this.winner === 1) playSound('explosion'); // Lose sound
+    else playSound('click'); // Tie sound
+
+    // Delay transition to post game screen slightly
+    setTimeout(() => {
+        gameState = "POST_GAME";
+    }, 1000); 
+  }
+
+
+  render() {
+    // 繪製競技場背景
+    this.renderArenaBackground();
+
+    // 繪製橋樑
+    fill(100, 80, 60);
+    rect(CANVAS_WIDTH / 2, BRIDGE_Y_POSITION, CANVAS_WIDTH, BRIDGE_HEIGHT*1.5); // River
+    fill(180, 150, 120); // Bridge color
+    rect(CANVAS_WIDTH / 4, BRIDGE_Y_POSITION, BRIDGE_WIDTH, BRIDGE_HEIGHT);
+    rect(CANVAS_WIDTH * 3 / 4, BRIDGE_Y_POSITION, BRIDGE_WIDTH, BRIDGE_HEIGHT);
+
+
+    // 繪製玩家塔、單位、聖水條、手牌等
+    this.players.forEach(p => p.render(this.gameObjects));
+    
+    // 繪製場上物件
+    this.gameObjects.sort((a, b) => a.pos.y - b.pos.y); // 繪製順序，y軸較大的後畫 (偽3D)
+    this.gameObjects.forEach(obj => obj.draw());
+
+    // 繪製粒子
+    this.particles.forEach(p => p.draw());
+
+    // 繪製UI元素 (計時器, 聖水等 - Player class 已經處理了部分)
+    this.renderGameInfo();
+    
+    // 如果有選中要出的牌，顯示放置提示
+    if (this.players[0].selectedCardToPlay) {
+        const card = this.players[0].selectedCardToPlay;
+        const targetRadius = card.attackRange || TILE_SIZE; // Use attackRange for spells, default for units
+        const deployColor = this.canDeployAt(card, mouseX, mouseY, this.players[0]) ? [0,255,0,100] : [255,0,0,100];
+        
+        fill(deployColor);
+        if (card.type === "spell") {
+            ellipse(mouseX, mouseY, targetRadius * 2, targetRadius * 2);
+        } else { // Troop or Building
+            rect(mouseX, mouseY, TILE_SIZE, TILE_SIZE);
+        }
+        // Display card range if applicable
+        if(card.attackRange > 0 && card.type !== "spell"){
+            noFill();
+            stroke(255,255,0,100);
+            ellipse(mouseX, mouseY, card.attackRange * 2, card.attackRange * 2);
+            noStroke();
+        }
+    }
+  }
+
+  renderArenaBackground() {
+    // 玩家區域 (下半部)
+    fill(70, 100, 70); // 綠色草地
+    rect(CANVAS_WIDTH / 2, CANVAS_HEIGHT * 3 / 4, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+    // AI 區域 (上半部)
+    fill(60, 90, 60); //稍暗的草地
+    rect(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 4, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+  }
+
+  renderGameInfo() {
+    // 計時器
+    fill(255);
+    textSize(32);
+    textAlign(CENTER, TOP);
+    let minutes = Math.floor(Math.max(0, this.timer) / 60);
+    let seconds = Math.floor(Math.max(0, this.timer) % 60);
+    text(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`, CANVAS_WIDTH / 2, 10);
+
+    if (this.matchPhase === "OVERTIME") {
+      fill(255, 200, 0);
+      text("加時賽!", CANVAS_WIDTH / 2, 50);
+    } else if (this.matchPhase === "TIEBREAKER") {
+      fill(255, 0, 0);
+      text("Tiebreaker!", CANVAS_WIDTH / 2, 50);
+    }
+  }
+
+  canDeployAt(cardData, x, y, player) {
+      const isFriendlySide = player.isHuman ? (y > BRIDGE_Y_POSITION) : (y < BRIDGE_Y_POSITION);
+      const isFriendlyTerritory = player.isHuman ? (y > BRIDGE_Y_POSITION - TILE_SIZE * 2) : (y < BRIDGE_Y_POSITION + TILE_SIZE * 2); // Slightly larger deploy zone past bridge
+
+      if (cardData.special === "deploy_anywhere_ground" && cardData.name === "鑽地礦工 Miner") {
+          return true; // Miner can be deployed anywhere on ground
+      }
+      if (cardData.type === "spell") {
+          return true; // Spells can usually be cast anywhere, specific targeting handled by spell logic
+      }
+      if (cardData.type === "building") {
+          return isFriendlySide && x > TILE_SIZE && x < CANVAS_WIDTH - TILE_SIZE; // Buildings only on own side
+      }
+      // Troops
+      return isFriendlyTerritory && x > TILE_SIZE && x < CANVAS_WIDTH - TILE_SIZE;
+  }
+
+  handleMousePressed(mx, my) {
+    const humanPlayer = this.players.find(p => p.isHuman);
+    if (!humanPlayer || this.winner !== null) return;
+
+    // 如果已選中一張牌等待放置
+    if (humanPlayer.selectedCardToPlay) {
+      const card = humanPlayer.selectedCardToPlay;
+      if (this.canDeployAt(card, mx, my, humanPlayer)) {
+          let targetPos = null;
+          if (card.type === "spell") targetPos = createVector(mx, my); // spell uses click point as target
+          
+          if (this.playCard(humanPlayer, card, createVector(mx, my), targetPos)) {
+            humanPlayer.selectedCardToPlay = null; // 清除選中狀態
+          }
+      } else {
+          // 無法放置，取消選擇
+          humanPlayer.selectedCardToPlay = null;
+          playSound('explosion'); //無效放置音效
+      }
+    } else { // 否則，嘗試選擇手牌
+      const handCardIndex = humanPlayer.getClickedCardIndex(mx, my);
+      if (handCardIndex !== -1) {
+        const selectedCard = humanPlayer.hand[handCardIndex];
+        const elixirCost = this.getCardElixir(selectedCard, humanPlayer);
+
+        if (selectedCard && humanPlayer.elixir >= elixirCost) {
+          if (selectedCard.type === "spell" && selectedCard.special === "mirror_last_card" && !this.lastPlayedCardPlayer) {
+            // Can't play mirror if no last card
+            playSound('explosion');
+            return;
+          }
+          humanPlayer.selectedCardToPlay = selectedCard;
+          playSound('click');
+        } else {
+            playSound('explosion'); // 聖水不足音效
+        }
+      }
+    }
+  }
+
+  // 給單位尋找目標用
+  findTargets(unit) {
+    let potentialTargets = [];
+    const opponentPlayer = this.players[unit.isFriendly ? 1 : 0];
+
+    // 收集所有有效的敵方目標 (單位和塔)
+    let allEnemyObjects = [];
+    this.gameObjects.forEach(obj => {
+      if (obj.isFriendly !== unit.isFriendly && obj.hp > 0 && (obj instanceof Unit || obj instanceof Building)) {
+        let canTargetThisType = false; // 單位卡牌設定是否能打此物件類型
+        if (unit.targetType === "any") canTargetThisType = true;
+        else if (unit.targetType === "buildings" && (obj instanceof Building || obj.isTower)) canTargetThisType = true;
+        else if (unit.targetType === "ground" && obj.movementType === "ground") canTargetThisType = true;
+        else if (unit.targetType === "air" && obj.movementType === "air") canTargetThisType = true;
+        
+        let canAttackMovementType = true; // 單位本身是否能攻擊此物件的移動類型
+        if (obj.movementType === 'air' && unit.cardData.targetType === 'ground' && unit.movementType === 'ground') {
+             // 典型的地面近戰/遠程單位不能打空中，除非卡牌有特殊設定 (例如弓箭手 targetType 是 any)
+             // 此處 cardData.targetType 已經處理了這部分，若為 ground 則不會選 air
+             // 但需要確保 unit.cardData.targetType 確實反映了對空能力
+             if (unit.cardData.targetType !== 'any' && unit.cardData.targetType !== 'air') {
+                canAttackMovementType = false;
              }
-         }
-     }
+        }
+
+
+        if (canTargetThisType && canAttackMovementType) {
+          allEnemyObjects.push(obj);
+        }
+      }
+    });
+    opponentPlayer.towers.forEach(tower => {
+      if (tower.hp > 0) {
+        let canTargetThisType = false;
+        if (unit.targetType === "any" || unit.targetType === "buildings") canTargetThisType = true;
+        // 假設所有單位都能攻擊地面目標的塔 (除非單位只打空中)
+        if (unit.targetType === "ground" && unit.cardData.targetType !== "air") canTargetThisType = true;
+
+        if (canTargetThisType) {
+          allEnemyObjects.push(tower);
+        }
+      }
+    });
+
+    if (allEnemyObjects.length === 0) return null;
+
+    // 排序邏輯:
+    // 1. 優先攻擊最近的敵方 "Unit" (如果單位不是專攻建築)
+    // 2. 如果單位專攻建築 ("buildings")，則優先攻擊最近的建築 (包括塔)
+    // 3. 如果沒有上述目標，則按原來的建築優先級 (公主塔 > 國王塔 > 其他建築)
+    // 4. 最後是按距離選擇。
+
+    allEnemyObjects.sort((a, b) => {
+      let distA = p5.Vector.dist(unit.pos, a.pos);
+      let distB = p5.Vector.dist(unit.pos, b.pos);
+
+      let aIsUnit = a instanceof Unit;
+      let bIsUnit = b instanceof Unit;
+      let aIsBuildingType = a instanceof Building || a.isTower; // 廣義的建築
+      let bIsBuildingType = b instanceof Building || b.isTower;
+
+      // 規則 A: 如果單位專攻建築
+      if (unit.targetType === "buildings") {
+        if (aIsBuildingType && !bIsBuildingType) return -1; // a是建築, b不是 -> a優先
+        if (!aIsBuildingType && bIsBuildingType) return 1;  // b是建築, a不是 -> b優先
+        if (aIsBuildingType && bIsBuildingType) { // 都是建築，按類型細分
+            let typePriorityA = (a.isTower ? (a.isKing ? 1 : 2) : 3); // 3:普通建築, 2:公主, 1:國王
+            let typePriorityB = (b.isTower ? (b.isKing ? 1 : 2) : 3);
+            if (typePriorityA !== typePriorityB) return typePriorityB - typePriorityA; // 數字大的優先
+            return distA - distB; // 同類型建築，近的優先
+        }
+        // 如果都不是建築 (理論上不該發生，因為 unit.targetType 是 buildings)，則按距離
+        return distA - distB;
+      }
+
+      // 規則 B: 非專攻建築的單位
+      // 優先打單位
+      if (aIsUnit && !bIsUnit) return -1; // a是單位, b不是 -> a優先
+      if (!aIsUnit && bIsUnit) return 1;  // b是單位, a不是 -> b優先
+      if (aIsUnit && bIsUnit) return distA - distB; // 都是單位，近的優先
+
+      // 如果都不是單位 (即都是建築了)，則按建築優先級
+      if (aIsBuildingType && bIsBuildingType) {
+        let typePriorityA = (a.isTower ? (a.isKing ? 1 : 2) : 3); // 3:普通建築, 2:公主, 1:國王
+        let typePriorityB = (b.isTower ? (b.isKing ? 1 : 2) : 3);
+        if (typePriorityA !== typePriorityB) return typePriorityB - typePriorityA;
+        return distA - distB;
+      }
+      
+      // Fallback (不太可能到這裡如果上面邏輯完整)
+      return distA - distB;
+    });
+    
+    // 再次過濾，確保選中的目標是單位能夠攻擊的移動類型
+    // (例如，一個只打地面的單位，即使排序後最近的是空軍，也不應該選它)
+    const finalTarget = allEnemyObjects.find(target => {
+        if (target.movementType === 'air') {
+            return unit.cardData.targetType === 'any' || unit.cardData.targetType === 'air';
+        }
+        if (target.movementType === 'ground') {
+            return unit.cardData.targetType === 'any' || unit.cardData.targetType === 'ground' || unit.cardData.targetType === 'buildings';
+        }
+        if (target instanceof Building || target.isTower) { // 建築視為地面
+             return unit.cardData.targetType === 'any' || unit.cardData.targetType === 'ground' || unit.cardData.targetType === 'buildings';
+        }
+        return true; // 預設可攻擊
+    });
+
+    return finalTarget || null; // 如果 find 返回 undefined，則返回 null
+  }
 }
 
-// Check if the player is close enough to automatically pick up items
-function checkItemPickup() {
-      if (!player || !player.pos || !worldItems || worldItems.length === 0) return; // Safety checks
-      const pickupCheckRadiusSq = player.pickupRadiusSq;
+// --- 玩家類別 ---
+class Player {
+  constructor(id, deckCards, isHuman = false) {
+    this.id = id; // 0 for player, 1 for AI
+    this.name = isHuman ? "玩家" : "電腦對手";
+    this.isHuman = isHuman;
+    this.elixir = 5; // 起始聖水
+    this.elixirRate = ELIXIR_RATE_NORMAL;
 
-      // Iterate backwards for safe removal while iterating
-      for (let i = worldItems.length - 1; i >= 0; i--) {
-          const item = worldItems[i];
-          // Ensure item is valid and has a position
-          if (!item || !item.pos || item.invalid) continue;
+    this.deck = this.shuffleDeck([...deckCards]); // CardData objects
+    this.hand = []; // 最多4張牌
+    this.nextCard = null; // 下一張牌
+    this.fillHand();
 
-          if (distSq(player.pos.x, player.pos.y, item.pos.x, item.pos.y) < pickupCheckRadiusSq) {
-              if (player.pickupItem(item)) { // pickupItem returns true if successful
-                  worldItems.splice(i, 1); // Remove item from the world
-              } else {
-                  // Pickup failed (likely inventory full), leave item on ground
-                  // Maybe add a small visual/audio cue that pickup failed?
+    this.towers = this.initTowers();
+    this.selectedCardToPlay = null; // For human player, the card selected from hand to be placed
+  }
+
+  initTowers() {
+    const towers = [];
+    const yPos = this.isHuman ? CANVAS_HEIGHT - KING_TOWER_Y_OFFSET : KING_TOWER_Y_OFFSET;
+    const princessYPos = this.isHuman ? CANVAS_HEIGHT - PRINCESS_TOWER_Y_OFFSET : PRINCESS_TOWER_Y_OFFSET;
+
+    // 國王塔
+    towers.push(BuildingUnit(CANVAS_WIDTH / 2, yPos, this.isHuman, STARTING_HP.king, 100, 7 * TILE_SIZE, true, "KingTower"));
+    // 公主塔
+    towers.push(BuildingUnit(CANVAS_WIDTH / 2 - PRINCESS_TOWER_X_SPACING, princessYPos, this.isHuman, STARTING_HP.princess, 120, 7.5 * TILE_SIZE, false, "PrincessTowerL"));
+    towers.push(BuildingUnit(CANVAS_WIDTH / 2 + PRINCESS_TOWER_X_SPACING, princessYPos, this.isHuman, STARTING_HP.princess, 120, 7.5 * TILE_SIZE, false, "PrincessTowerR"));
+    return towers;
+  }
+
+  shuffleDeck(deck) {
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    return deck;
+  }
+
+  fillHand() {
+    while (this.hand.length < 4 && this.deck.length > 0) {
+      this.hand.push(this.deck.shift());
+    }
+    if (this.deck.length > 0) {
+      this.nextCard = this.deck[0];
+    } else {
+      this.nextCard = null; // Should not happen with 8 card deck cycle
+    }
+  }
+  
+  cycleCard(playedCardData) {
+    // Remove played card from hand
+    const handIndex = this.hand.findIndex(card => card.id === playedCardData.id);
+    if (handIndex !== -1) {
+        this.hand.splice(handIndex, 1);
+    }
+    // Add it back to the deck (end of deck)
+    this.deck.push(playedCardData);
+
+    // Draw next card into hand
+    if(this.deck.length > 0) { // Should always be true if cycling
+        this.hand.push(this.deck.shift());
+    }
+    // Update next card display
+    if(this.deck.length > 0) {
+        this.nextCard = this.deck[0];
+    } else {
+        this.nextCard = null;
+    }
+  }
+
+
+  update(dt, elixirRateMultiplier = 1) {
+    // 聖水回復
+    if (this.elixir < ELIXIR_MAX) {
+      this.elixir += this.elixirRate * elixirRateMultiplier * dt;
+      this.elixir = Math.min(this.elixir, ELIXIR_MAX);
+    }
+    // 塔的更新 (例如攻擊)
+    this.towers.forEach(tower => tower.update(dt, currentMatch)); // Pass match for target finding
+  }
+
+  render(allGameObjects) {
+    // 繪製塔
+    this.towers.forEach(tower => tower.draw());
+
+    if (!this.isHuman) return; // 以下只為人類玩家繪製
+
+    // 繪製聖水條
+    const elixirBarWidth = 300;
+    const elixirBarHeight = 30;
+    const elixirBarX = CANVAS_WIDTH / 2;
+    const elixirBarY = CANVAS_HEIGHT - 40;
+    fill(150, 50, 200, 150); // 背景色
+    rect(elixirBarX, elixirBarY, elixirBarWidth, elixirBarHeight, 5);
+    fill(220, 100, 255); // 聖水色
+    const currentElixirWidth = (this.elixir / ELIXIR_MAX) * elixirBarWidth;
+    rect(elixirBarX - (elixirBarWidth - currentElixirWidth)/2 , elixirBarY, currentElixirWidth, elixirBarHeight, 5);
+    fill(255);
+    textSize(20);
+    textAlign(CENTER, CENTER);
+    text(Math.floor(this.elixir), elixirBarX, elixirBarY);
+
+    // 繪製手牌
+    const cardWidth = 80;
+    const cardHeight = 100;
+    const handY = CANVAS_HEIGHT - 120;
+    const handSpacing = 10;
+    const totalHandWidth = this.hand.length * cardWidth + (this.hand.length - 1) * handSpacing;
+    let startHandX = CANVAS_WIDTH / 2 - totalHandWidth / 2;
+
+    this.hand.forEach((card, index) => {
+      if (!card) return;
+      const cardX = startHandX + index * (cardWidth + handSpacing) + cardWidth / 2;
+      
+      const elixirCost = currentMatch ? currentMatch.getCardElixir(card, this) : card.elixir; // Get actual elixir cost
+
+      // Highlight if selected or affordable
+      if (this.selectedCardToPlay && this.selectedCardToPlay.id === card.id) {
+          stroke(255,255,0); strokeWeight(3);
+      } else if (this.elixir >= elixirCost) {
+          stroke(0,255,0); strokeWeight(2);
+      } else {
+          stroke(100); strokeWeight(1);
+      }
+
+      fill(getRarityColor(card.rarity, this.elixir < elixirCost ? 100: 255));
+      rect(cardX, handY, cardWidth, cardHeight, 8);
+      noStroke();
+
+      fill(this.elixir < elixirCost ? 128 : 0);
+      textSize(11);
+      textAlign(CENTER, CENTER);
+      text(card.name, cardX, handY - cardHeight/2 + 15, cardWidth - 4);
+      textSize(18);
+      text(elixirCost, cardX, handY + cardHeight/2 - 20);
+      
+      // Small icon for type
+      textSize(10);
+      text(card.type, cardX, handY + cardHeight/2 - 40);
+    });
+
+    // 繪製下一張牌
+    if (this.nextCard) {
+      const nextCardX = startHandX + totalHandWidth + handSpacing + cardWidth / 2 + 20;
+      const nextCardY = handY;
+      fill(getRarityColor(this.nextCard.rarity, 150)); // Dimmed
+      rect(nextCardX, nextCardY, cardWidth * 0.8, cardHeight * 0.8, 8);
+      fill(50);
+      textSize(10);
+      text(this.nextCard.name, nextCardX, nextCardY - cardHeight*0.4 + 10, cardWidth*0.8 - 4);
+      textSize(14);
+      text(this.nextCard.elixir, nextCardX, nextCardY + cardHeight*0.4 - 15);
+      textSize(10);
+      textAlign(CENTER, TOP);
+      fill(255);
+      text("Next", nextCardX, nextCardY - cardHeight*0.4 - 15);
+    }
+  }
+
+  getClickedCardIndex(mx, my) {
+    if (!this.isHuman) return -1;
+    const cardWidth = 80;
+    const cardHeight = 100;
+    const handY = CANVAS_HEIGHT - 120;
+    const handSpacing = 10;
+    const totalHandWidth = this.hand.length * cardWidth + (this.hand.length - 1) * handSpacing;
+    let startHandX = CANVAS_WIDTH / 2 - totalHandWidth / 2;
+
+    for (let i = 0; i < this.hand.length; i++) {
+      const cardX_rect_start = startHandX + i * (cardWidth + handSpacing);
+      if (mx >= cardX_rect_start && mx <= cardX_rect_start + cardWidth &&
+          my >= handY - cardHeight/2 && my <= handY + cardHeight/2) {
+        return i;
+      }
+    }
+    return -1;
+  }
+}
+
+
+// --- 遊戲物件基礎類別 ---
+class GameObject {
+  constructor(x, y, isFriendly, cardData = null) {
+    this.pos = createVector(x, y);
+    this.isFriendly = isFriendly; // true for player's, false for AI's
+    this.id = Symbol(); // 唯一ID
+    this.isDestroyed = false;
+    this.cardData = cardData; // The card that spawned this object
+    this.movementType = cardData ? cardData.movementType : "ground"; // "ground" or "air"
+  }
+
+  update(dt, matchContext) { /* 抽象方法 */ }
+  draw() { /* 抽象方法 */ }
+  takeDamage(amount) { /* 抽象方法 */ }
+}
+
+// --- 單位 (Troop) ---
+class Unit extends GameObject {
+  constructor(x, y, isFriendly, unitProps, cardData) { // unitProps from UNIT_TEMPLATES or cardData
+    super(x, y, isFriendly, cardData); // Pass cardData to GameObject constructor
+    
+    this.name = unitProps.name;
+    this.maxHp = unitProps.hp;
+    this.hp = unitProps.hp;
+    this.dmg = unitProps.dmg;
+    this.speed = unitProps.speed || SPEED_MAP["medium"]; // px/sec
+    this.attackRange = unitProps.attackRange;
+    this.targetType = unitProps.targetType; // "ground", "air", "any", "buildings"
+    this.movementType = unitProps.movementType; // "ground", "air"
+    this.splashRadius = unitProps.splashRadius || 0;
+    this.special = unitProps.special || ""; // e.g. "charge", "kamikaze"
+
+    this.visual = unitProps.visual || { // Default visual if not in unitProps
+        size: this.movementType === 'air' ? TILE_SIZE * 0.7 : TILE_SIZE * 0.8,
+        color: this.movementType === 'air' ? COLOR_AIR_UNIT : COLOR_GROUND_UNIT
+    };
+    if (this.isFriendly) this.visual.color = lerpColor(color(this.visual.color), color(COLOR_PLAYER), 0.3);
+    else this.visual.color = lerpColor(color(this.visual.color), color(COLOR_AI), 0.3);
+
+
+    this.target = null;
+    this.attackCooldown = 0;
+    this.attackSpeed = 1.5; // attacks per second (default, can be card-specific)
+
+    if (this.special === "charge" && this.cardData.name === "Prince") {
+        this.chargeSpeedBonus = 2.0; // Prince charges faster
+        this.chargeDamageBonus = 2.0;
+        this.isCharging = true;
+        this.chargeDistance = TILE_SIZE * 3.5; // Min distance to start charge
+        this.originalSpeed = this.speed;
+    }
+    if (this.special === "shield_to_building" && this.cardData.name === "加農車 Cannon Cart") {
+        this.shieldHp = unitProps.hp; // First HP bar is shield
+        this.baseHp = 700; // HP after shield breaks (example)
+        this.isShielded = true;
+    }
+     if (this.special === "kamikaze" && this.cardData.name === "精靈 Spirit") {
+        this.attackSpeed = 0.5; // Fast attack for kamikaze
+    }
+  }
+
+  update(dt, match) {
+    if (this.hp <= 0) {
+      this.isDestroyed = true;
+      return;
+    }
+
+    if (this.attackCooldown > 0) {
+      this.attackCooldown -= dt;
+    }
+
+    // 特殊邏輯: Prince charge
+    if (this.special === "charge" && this.isCharging) {
+        this.speed = this.originalSpeed * this.chargeSpeedBonus;
+    } else if (this.special === "charge") {
+        this.speed = this.originalSpeed;
+    }
+
+
+    // 尋找目標
+    if (!this.target || this.target.hp <= 0 || this.target.isDestroyed) {
+      this.target = match.findTargets(this);
+      if (this.target && this.special === "charge") this.isCharging = true; // Start charging if new target
+    }
+
+    if (this.target) {
+      const distToTarget = p5.Vector.dist(this.pos, this.target.pos);
+      if (distToTarget <= this.attackRange) {
+        // 在攻擊範圍內，停止移動並攻擊
+        if (this.special === "charge" && this.isCharging) { // Prince charge attack
+            this.attack(this.target, match, this.dmg * this.chargeDamageBonus);
+            this.isCharging = false; // Charge used
+        } else {
+            this.attack(this.target, match, this.dmg);
+        }
+         if (this.special === "kamikaze") { // Kamikaze units die on attack
+            this.hp = 0; 
+        }
+
+      } else {
+        // 移動向目標
+        let moveDir = p5.Vector.sub(this.target.pos, this.pos);
+        moveDir.normalize();
+        // Avoid collision with own towers when moving (simple check)
+        let collisionAvoid = false;
+        const friendlyPlayer = match.players[this.isFriendly ? 0 : 1];
+        friendlyPlayer.towers.forEach(tower => {
+            if (p5.Vector.dist(this.pos, tower.pos) < TILE_SIZE * 0.8) { // Close to own tower
+                if (moveDir.dot(p5.Vector.sub(this.pos, tower.pos)) > 0) { // Moving towards own tower center
+                    // Try to move around it, very simplified: slightly alter direction
+                    // This is a very naive avoidance, real pathfinding is complex
+                    // moveDir.rotate(this.isFriendly ? PI/8 : -PI/8); 
+                }
+            }
+        });
+        
+        this.pos.add(moveDir.mult(this.speed * dt));
+        if (this.special === "charge" && this.isCharging && distToTarget < this.chargeDistance / 2) {
+            // If gets very close without attacking (e.g. target moved), might stop charge
+            // this.isCharging = false; 
+        }
+      }
+    } else {
+      // 沒有目標，向對方國王塔移動 (推進)
+      const opponentKingTower = match.players[this.isFriendly ? 1 : 0].towers.find(t => t.isKing);
+      if (opponentKingTower && opponentKingTower.hp > 0) {
+        let moveDir = p5.Vector.sub(opponentKingTower.pos, this.pos);
+        moveDir.normalize();
+        this.pos.add(moveDir.mult(this.speed * dt));
+      }
+    }
+  }
+
+  attack(target, match, damageOverride = null) {
+    if (this.attackCooldown <= 0) {
+      const actualDamage = damageOverride !== null ? damageOverride : this.dmg;
+
+      // 判斷是否為遠程攻擊 (攻擊範圍大於近戰閾值)
+      // 1.2 * TILE_SIZE 是多數近戰的範圍，所以比它大的都算遠程
+      const isRangedAttack = this.attackRange > 1.7 * TILE_SIZE; // 可微調此閾值
+
+      if (isRangedAttack && this.cardData.type !== "spell" && this.dmg > 0) {
+        let projectileSpeed = 10; // 基礎速度係數
+        let visualOptions = {
+            type: 'ellipse',
+            size: 8,
+            color: this.isFriendly ? [200,200,255,200] : [255,200,200,200]
+        };
+
+        // 特定單位的投射物外觀 (例如弓箭手)
+        if (this.cardData.name.includes("Archer") || this.cardData.name.includes("弓箭手") || this.cardData.name.includes("女弓")) {
+            visualOptions.type = 'rect';
+            visualOptions.size = 12; // 箭長
+            visualOptions.color = [220, 180, 100];
+        } else if (this.cardData.name.includes("電法")) {
+            visualOptions.color = [100, 100, 255];
+            visualOptions.size = 10;
+        }
+
+        const projectile = new Projectile(this.pos.x, this.pos.y, target, projectileSpeed, actualDamage, this.isFriendly, visualOptions, this.cardData);
+        match.gameObjects.push(projectile);
+        // playSound('arrow_shot'); // 播放發射音效，需要定義
+      } else { // 近戰或特殊攻擊 (如範圍濺射), 或傷害為0的單位(如純召喚)
+        if (this.splashRadius > 0 && actualDamage > 0) {
+          match.gameObjects.forEach(obj => {
+            if (obj.isFriendly !== this.isFriendly && obj.hp > 0 && p5.Vector.dist(this.pos, obj.pos) <= this.splashRadius + (obj.visual ? obj.visual.size*0.5 : TILE_SIZE*0.4)) { // 濺射也考慮目標大小
+              obj.takeDamage(actualDamage);
+              match.spawnParticleEffect(obj.pos, 3, [255,150,0], 'hit_splash');
+            }
+          });
+          match.players[this.isFriendly ? 1 : 0].towers.forEach(tower => {
+              if (tower.hp > 0 && p5.Vector.dist(this.pos, tower.pos) <= this.splashRadius + tower.size*0.4) {
+                  tower.takeDamage(actualDamage);
+                  match.spawnParticleEffect(tower.pos, 3, [255,150,0], 'hit_splash');
               }
-              // Consider breaking after one successful pickup attempt per frame?
-              // break; // Uncomment to only try picking up one item per frame
-          }
+          });
+           playSound('hit'); // 濺射命中音效
+        } else if (actualDamage > 0) { // 單體近戰
+          target.takeDamage(actualDamage);
+          match.spawnParticleEffect(target.pos, 5, [255,255,0], 'hit');
+          playSound('hit');
+        }
       }
+
+      this.attackCooldown = 1 / this.attackSpeed;
+
+      if (this.special === "kamikaze" && actualDamage > 0) {
+        this.hp = 0;
+      }
+      if (this.special === "stun_split_attack" && target.attackCooldown !== undefined) {
+        target.attackCooldown = Math.max(target.attackCooldown, 0.5);
+      }
+    }
+  }
+
+  takeDamage(amount) {
+    if (this.special === "shield_to_building" && this.isShielded) {
+        this.shieldHp -= amount;
+        if(this.shieldHp <=0) {
+            this.isShielded = false;
+            this.hp = this.baseHp; // Switch to base HP
+            this.maxHp = this.baseHp;
+            // Convert to building (simplified: become immobile, different stats maybe)
+            // For simplicity, we'll just change its behavior slightly rather than full class swap
+            this.speed = 0; 
+            this.movementType = "building_like"; // Cannot move
+            this.name = "Cannon (Cart Remains)";
+            this.visual.color = COLOR_BUILDING;
+        }
+    } else {
+        this.hp -= amount;
+    }
+    if (this.hp <= 0) {
+      this.isDestroyed = true;
+      // Death effects like Balloon bomb are handled in Match update's destruction check
+    }
+  }
+
+  draw() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    
+    // 根據陣營和類型選擇顏色
+    let unitColor = this.visual.color;
+    
+    fill(unitColor);
+    if (this.movementType === "air") {
+      ellipse(0, 0, this.visual.size, this.visual.size * 0.7); // 空中單位用橢圓
+      // 簡易陰影
+      fill(0,0,0,50);
+      ellipse(0, this.visual.size * 0.5, this.visual.size, this.visual.size * 0.2);
+    } else {
+      rect(0, 0, this.visual.size, this.visual.size); // 地面單位用矩形
+    }
+    
+    // 繪製血條
+    const hpBarWidth = this.visual.size;
+    const hpBarHeight = 5;
+    const hpBarY = -this.visual.size / 2 - 10;
+    fill(50);
+    rect(0, hpBarY, hpBarWidth, hpBarHeight);
+    let currentHp = this.hp;
+    let currentMaxHp = this.maxHp;
+    if (this.special === "shield_to_building" && this.isShielded) {
+        currentHp = this.shieldHp;
+        currentMaxHp = this.cardData.hp; // Original card HP as shield HP
+        fill(180,180,255); // Shield color
+    } else {
+       fill(0, 255, 0); // HP color
+    }
+    rect(- (hpBarWidth - (hpBarWidth * (currentHp / currentMaxHp))) / 2, hpBarY, hpBarWidth * (currentHp / currentMaxHp), hpBarHeight);
+
+    
+        // *** 新增：繪製單位名稱 ***
+    fill(255); // 白色文字
+    textSize(10);
+    textAlign(CENTER, BOTTOM); // 文字在血條上方
+    let displayName = this.cardData && this.cardData.name ? this.cardData.name : this.name;
+    // 對於召喚多個子單位的卡牌，顯示子單位的名稱
+    if (this.cardData && this.cardData.spawnCount > 1 && UNIT_TEMPLATES[this.cardData.spawnUnitId]) {
+        displayName = UNIT_TEMPLATES[this.cardData.spawnUnitId].name;
+    } else if (this.cardData && this.name !== this.cardData.name && this.name === "Skeleton" ) { // Handle Graveyard Skeletons using template name
+        displayName = UNIT_TEMPLATES.skeleton_basic.name;
+    }
+    text(displayName, 0, hpBarY - hpBarHeight / 2 - 2); // 調整Y軸位置，使其在血條之上
+
+    
+    // Debug: show name
+    // fill(255); textSize(10); textAlign(CENTER, CENTER); text(this.name, 0, 0);
+
+    pop();
+  }
 }
 
-// --- Visual Effects Management ---
-function renderVisualEffects(offsetX, offsetY) {
-     // Ensure visualEffects array and p5 functions exist
-     if (typeof visualEffects === 'undefined' || typeof push !== 'function') return;
+// --- 建築 (Building & Towers) ---
+class Building extends GameObject {
+  constructor(x, y, isFriendly, cardData) {
+    super(x, y, isFriendly, cardData);
+    this.maxHp = cardData.hp;
+    this.hp = cardData.hp;
+    this.dmg = cardData.dmg;
+    this.attackRange = cardData.attackRange;
+    this.targetType = cardData.targetType; // "ground", "air", "any"
+    this.splashRadius = cardData.splashRadius || 0;
+    this.special = cardData.special || "";
+    
+    this.attackCooldown = 0;
+    this.attackSpeed = 1; // Default attacks per second, can be card-specific (e.g. XBow, Inferno)
+    this.target = null;
+    this.size = TILE_SIZE * 1.5;
+    
+    this.color = this.isFriendly ? lerpColor(color(COLOR_BUILDING), color(COLOR_PLAYER), 0.3) : lerpColor(color(COLOR_BUILDING), color(COLOR_AI), 0.3);
 
-     push();
-     for (let effect of visualEffects) {
-          if (!effect || !effect.startTime || !effect.duration) continue; // Skip invalid effects
+    if (this.special === "ramping_damage" && this.cardData.name === "火塔 Inferno Tower") {
+        this.rampDmgStages = [cardData.dmg, cardData.dmg * 4, cardData.dmg * 20]; // Example stages
+        this.currentRampStage = 0;
+        this.timeOnTarget = 0;
+        this.rampUpTime = 2; // Seconds to reach next stage
+        this.attackSpeed = 4; // Inferno Tower attacks faster
+    }
+    if (this.special === "fast_attack_rate" && this.cardData.name === "X 砲 X-Bow") {
+        this.attackSpeed = 3.33; // X-Bow fast attack rate
+    }
+  }
+  
+  // Towers are a special type of BuildingUnit for gameplay logic but share Building class for now
+  // Use this constructor for player/AI main towers
+  static 塔樓(x, y, isFriendly, hp, dmg, range, isKing, typeName) {
+      const cardDataLike = { // Mock cardData for towers
+          hp: hp, dmg: dmg, attackRange: range,
+          targetType: "any", // Towers typically hit ground and air
+          type: "building", name: typeName,
+          movementType: "n/a" // Not a standard card field, but useful
+      };
+      let tower = new Building(x, y, isFriendly, cardDataLike);
+      tower.isTower = true;
+      tower.isKing = isKing;
+      tower.size = isKing ? TILE_SIZE * 2.5 : TILE_SIZE * 2;
+      tower.color = isFriendly ? COLOR_PLAYER : COLOR_AI; // Towers have distinct colors
+      if(isKing) tower.attackSpeed = 1; else tower.attackSpeed = 1/0.8; // King tower slower, Princess faster
+      return tower;
+  }
 
-          const elapsed = millis() - effect.startTime;
-          let progress = constrain(elapsed / effect.duration, 0, 1);
-          if (progress >= 1) continue; // Effect finished
 
-          // Determine position: use target's position if available, else use effect's stored pos
-          let effectX = effect.pos ? effect.pos.x : 0;
-          let effectY = effect.pos ? effect.pos.y : 0;
-          if (effect.target && effect.target.pos) {
-               effectX = effect.target.pos.x;
-               effectY = effect.target.pos.y;
-          }
+  update(dt, match) {
+    if (this.hp <= 0) {
+      if (this.isDestroyed) return; // Already processed
+      this.isDestroyed = true;
+      playSound('explosion');
+      match.spawnParticleEffect(this.pos, 50, this.color, 'explosion');
+      // King tower destruction handled by Match logic for win condition
+      return;
+    }
 
-          push();
-          translate(effectX - offsetX, effectY - offsetY);
+    if (this.attackCooldown > 0) {
+      this.attackCooldown -= dt;
+    }
 
-          // Calculate fading alpha
-          let currentAlpha = 255 * (1 - progress); // Simple linear fade out
+    // 特斯拉隱藏邏輯
+    if (this.special === "hide_until_attack" && this.cardData.name === "特斯拉 Tesla") {
+        if (!this.target && (!this.isHiddenExplicitly || this.isHiddenExplicitly === undefined) ) { // If no target, hide. isHiddenExplicitly might be used for manual unhide.
+            // Don't draw or be targetable if hidden. This logic is tricky.
+            // For now, assume it's always visible once placed until simpler hide logic.
+        }
+    }
 
-           // Render based on effect type
-           switch(effect.type) {
-                case 'line': // Attack line (player, monster, npc)
-                     if (effect.start && effect.end && effect.color) {
-                        stroke(red(effect.color), green(effect.color), blue(effect.color), currentAlpha * 0.8);
-                        strokeWeight(max(1, map(progress, 0, 1, 4, 1))); // Line gets thinner
-                        // Calculate end relative to start (which is now 0,0 due to translate)
-                         let endX = effect.end.x - effect.start.x;
-                         let endY = effect.end.y - effect.start.y;
-                         // Shorten line as it progresses?
-                         line(0,0, endX * (1 - progress * 0.3), endY * (1 - progress * 0.3));
-                     }
-                     break;
-                case 'flash': // Damage flash on target
-                     if (effect.target && effect.color) {
-                          fill(red(effect.color), green(effect.color), blue(effect.color), currentAlpha * 0.6);
-                          noStroke();
-                           let size = effect.target.size || TILE_SIZE; // Use target size or default
-                           ellipse(0, 0, size * (1 + progress * 0.5), size * (1 + progress * 0.5)); // Expanding flash
-                     }
-                      break;
-                case 'circleExpand': // Level up effect
-                     if (effect.target && effect.color && effect.maxRadius) {
-                          noFill();
-                          strokeWeight(max(1, map(progress, 0, 1, 6, 1))); // Ring gets thinner
-                          stroke(red(effect.color), green(effect.color), blue(effect.color), currentAlpha);
-                          ellipse(0, 0, effect.maxRadius * progress, effect.maxRadius * progress); // Circle expands outwards
-                     }
-                     break;
-                 case 'spark': // Projectile impact spark
-                      if (effect.pos && effect.color) {
-                           stroke(red(effect.color), green(effect.color), blue(effect.color), currentAlpha);
-                           strokeWeight(random(1,3));
-                           let len = 10 * (1-progress); // Sparks shrink
-                            for(let i=0; i<5; ++i){ // Draw a few short lines radiating out
-                                 let angle = random(TWO_PI);
-                                 line(0,0, cos(angle)*len, sin(angle)*len);
-                            }
-                      }
-                      break;
-               // Add more effect types here...
+    // 尋找目標
+    if (!this.target || this.target.hp <= 0 || this.target.isDestroyed) {
+      this.target = this.findBuildingTarget(match);
+      if (this.target && this.special === "ramping_damage") { // Reset ramp if target changes
+          this.currentRampStage = 0;
+          this.timeOnTarget = 0;
+      }
+    }
+    
+    if (this.target) {
+      const distToTarget = p5.Vector.dist(this.pos, this.target.pos);
+      if (distToTarget <= this.attackRange) {
+        let currentDmg = this.dmg;
+        if (this.special === "ramping_damage") {
+            this.timeOnTarget += dt;
+            if (this.timeOnTarget >= this.rampUpTime && this.currentRampStage < this.rampDmgStages.length -1) {
+                this.currentRampStage++;
+                this.timeOnTarget = 0; // Reset time for next stage
+            }
+            currentDmg = this.rampDmgStages[this.currentRampStage];
+        }
+        this.attack(this.target, match, currentDmg);
+      } else {
+        this.target = null; // Target out of range
+        if (this.special === "ramping_damage") { // Reset ramp if target lost
+            this.currentRampStage = 0;
+            this.timeOnTarget = 0;
+        }
+      }
+    }
+  }
+
+  findBuildingTarget(match) {
+    let potentialTargets = [];
+    const opponentPlayer = match.players[this.isFriendly ? 1 : 0];
+
+    // 1. 收集敵方單位
+    match.gameObjects.forEach(obj => {
+      if (obj.isFriendly !== this.isFriendly && obj.hp > 0 && obj instanceof Unit) {
+        let canTargetThisType = false; // 建築卡牌設定是否能打此物件類型
+        if (this.targetType === "any") canTargetThisType = true;
+        else if (this.targetType === obj.movementType) canTargetThisType = true;
+        // 建築物通常不會有 "buildings" targetType，而是 "ground", "air", "any"
+        
+        if (canTargetThisType) {
+          potentialTargets.push(obj);
+        }
+      }
+    });
+
+    // 2. 收集敵方建築物 (包括塔樓)
+    // 只有某些建築會主動攻擊敵方建築 (例如 X-Bow)
+    // 塔樓之間是否互相攻擊，可以根據遊戲平衡決定。這裡我們先允許它們在沒有單位時互相攻擊。
+    let canAttackEnemyBuildings = false;
+    if (this.cardData && (this.cardData.name === "X 砲 X-Bow" || this.cardData.name === "皇家巨人 Royal Giant")) { // 皇家巨人也是打建築的單位，但他不是Building類
+      canAttackEnemyBuildings = true; // X-Bow 明確攻擊建築
+    }
+    if (this.isTower) { // 如果自身是塔樓
+        canAttackEnemyBuildings = true; // 允許塔樓攻擊敵方塔樓或建築
+    }
+    // 你也可以根據 cardData.targetType 來決定，例如如果 targetType 包含 "buildings"
+    if (this.targetType === "any" || this.targetType === "ground" || this.targetType === "buildings" ) { // 若建築能打地面或任何目標，也應考慮敵方建築
+         canAttackEnemyBuildings = true;
+    }
+
+
+    if (canAttackEnemyBuildings) {
+      // 敵方玩家放置的建築物
+      match.gameObjects.forEach(obj => {
+        if (obj.isFriendly !== this.isFriendly && obj.hp > 0 && obj instanceof Building && !obj.isTower) { // 非塔樓的普通建築
+           // 確保我方建築可以攻擊此類型的建築 (通常建築是地面目標)
+           if (this.targetType === "any" || this.targetType === "ground") {
+               potentialTargets.push(obj);
            }
-          pop(); // Restore transform matrix for this effect
-     }
-     pop(); // Restore global drawing state
-}
-// Update visual effects array, removing expired ones
-function updateVisualEffects(){
-     if (typeof visualEffects === 'undefined') return;
-     const now = millis();
-     // Filter: keep effects where current time is before start time + duration
-      visualEffects = visualEffects.filter(effect => effect && effect.startTime && effect.duration && (now < effect.startTime + effect.duration));
-}
-
-
-// --- Utility and Event Functions ---
-
-// Handle window resize
-function windowResized() {
-    resizeCanvas(windowWidth, windowHeight); // Adjust canvas size
-    // Recalculate UI layout based on new dimensions
-    if (uiManager && typeof uiManager.calculateLayout === 'function') {
-         uiManager.calculateLayout();
+        }
+      });
+      // 敵方塔樓
+      opponentPlayer.towers.forEach(tower => {
+        if (tower.hp > 0) {
+          // 確保我方建築可以攻擊塔樓 (通常視為地面目標)
+          if (this.targetType === "any" || this.targetType === "ground") {
+            potentialTargets.push(tower);
+          }
+        }
+      });
     }
-    // Recenter camera if needed (optional, might be disorienting)
-    // if(player) centerCameraOnPlayer(true);
-}
 
-// Restart the game from the beginning
-function restartGame() {
-     console.log("Restarting game...");
+    if (potentialTargets.length === 0) return null;
 
-     // Reset game state variables
-     monsters = [];
-     npcs = [];
-     worldItems = [];
-     projectiles = [];
-     visualEffects = [];
-     lastMonsterSpawnTime = 0;
-     audioInitialized = false; // Requires new interaction to enable audio
+    // 排序目標：
+    // 優先級：
+    // 1. 最近的敵方單位 (如果建築可以打單位)
+    // 2. 然後是最近的敵方建築 (如果可以打建築，例如X-Bow)
+    // 3. 然後是最近的敵方公主塔
+    // 4. 最後是最近的敵方國王塔
 
-     // Re-generate maps (this also resets spawn points)
-     console.log("Re-generating maps...");
-     villageMap = new GameMap(MapSettings.villageWidth, MapSettings.villageHeight, true);
-     wildernessMap = new GameMap(MapSettings.wildernessWidth, MapSettings.wildernessHeight, false);
+    potentialTargets.sort((a, b) => {
+      let distA = p5.Vector.dist(this.pos, a.pos);
+      let distB = p5.Vector.dist(this.pos, b.pos);
 
-     // Re-create player at the start location
-     console.log("Re-creating player...");
-     let startPos = (villageMap && villageMap.entryPoint) ? villageMap.entryPoint : createVector(TILE_SIZE * 5, TILE_SIZE * 5);
-     player = new Player(startPos.x, startPos.y);
+      let priorityA = 0; // 0: Unit, 1: Building, 2: Princess Tower, 3: King Tower
+      let priorityB = 0;
 
-     // Re-spawn NPCs
-     console.log("Re-spawning NPCs...");
-     spawnInitialNpcs();
+      if (a instanceof Unit) priorityA = 0;
+      else if (a instanceof Building && !a.isTower) priorityA = 1;
+      else if (a.isTower && !a.isKing) priorityA = 2;
+      else if (a.isTower && a.isKing) priorityA = 3;
 
-     // Re-create UI Manager
-     uiManager = new UIManager();
-
-     // Reset map and game state
-     currentMap = villageMap;
-     gameState = 'village';
-     centerCameraOnPlayer(true); // Center camera immediately
-
-     // Add welcome message and audio prompt again
-     if (uiManager) {
-         const welcomeText = (typeof UIText !== 'undefined' && UIText.welcome) ? UIText.welcome : "Welcome!";
-         const rareColor = (typeof getRarityP5Color === 'function') ? getRarityP5Color('rare') : color(0, 112, 255);
-         uiManager.addMessage(welcomeText, rareColor, 5000);
-         uiManager.addMessage("Click screen to enable sound", color(200, 200, 100), 10000);
+      if (b instanceof Unit) priorityB = 0;
+      else if (b instanceof Building && !b.isTower) priorityB = 1;
+      else if (b.isTower && !b.isKing) priorityB = 2;
+      else if (b.isTower && b.isKing) priorityB = 3;
+      
+      // X-Bow 的特殊邏輯: 它優先打建築物，尤其是塔
+      if (this.cardData && this.cardData.name === "X 砲 X-Bow") {
+          let xbowPriorityA = (a.isTower ? (a.isKing ? 1 : 2) : (a instanceof Building ? 3 : 4)); // 1 King, 2 Princess, 3 Building, 4 Unit
+          let xbowPriorityB = (b.isTower ? (b.isKing ? 1 : 2) : (b instanceof Building ? 3 : 4));
+          if (xbowPriorityA !== xbowPriorityB) return xbowPriorityA - xbowPriorityB; // 數字小的優先
+          return distA - distB;
       }
 
-     // Give starting items again
-     if (player && typeof player.pickupItem === 'function') {
-         player.pickupItem(new DroppedItem(new Item('hp_potion_small', 5), 0, 0));
-         player.pickupItem(new DroppedItem(new Item('rusty_sword'), 0, 0));
-         player.pickupItem(new DroppedItem(new Item('leather_armor'), 0, 0));
-     }
 
-     console.log("Game restart complete.");
+      // 預設排序: 單位 > 普通建築 > 公主塔 > 國王塔 (數字小的優先)
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // 同優先級，距離近的優先
+      return distA - distB;
+    });
+    
+    // 最後再檢查一次，選出的目標是否真的是此建築能攻擊的類型 (ground/air)
+    // 例如，如果排序後最近的是空軍，但此建築只能打地面，則不能選它。
+    const finalTarget = potentialTargets.find(target => {
+        if (target.movementType === 'air') { // 假設建築攻擊的目標是 Unit
+            return this.targetType === 'any' || this.targetType === 'air';
+        }
+        // 其他 (Unit ground, Building, Tower) 都視為地面目標
+        return this.targetType === 'any' || this.targetType === 'ground';
+    });
+
+    return finalTarget || null;
+  }
+
+  attack(target, match, damageToDeal) {
+    if (this.attackCooldown <= 0 && this.dmg > 0) { // 只有傷害大於0的建築才發射
+      let projectileSpeed = 12;
+      let visualOptions = {
+          type: 'ellipse',
+          size: (this.isTower && this.isKing) ? 10 : 8, // 國王塔子彈大一點
+          color: this.isFriendly ? [100,150,255] : [255,100,100]
+      };
+
+      if (this.special === "ramping_damage") { // Inferno Tower 特效
+         visualOptions.color = [255, Math.max(50, 150 - this.currentRampStage * 40) , 0]; // 顏色隨階段變深
+         visualOptions.size = 6 + this.currentRampStage * 2;
+         projectileSpeed = 15; // 光束快
+      } else if (this.cardData.name === "X 砲 X-Bow") {
+          visualOptions.size = 6;
+          visualOptions.color = [200,200,200];
+          projectileSpeed = 18; // XBow 射速快，子彈也快
+      } else if (this.cardData.name.includes("加農砲") || this.cardData.name.includes("Cannon")) {
+          visualOptions.size = 10;
+          visualOptions.color = [120,120,120];
+      }
+
+
+      // 投射物起始位置略微調整，使其看起來從塔/建築的 "砲口" 發射
+      let startOffset = createVector(0, -this.size * 0.3); // 默認向上
+      if (this.cardData.name === "X 砲 X-Bow" || this.cardData.name.includes("加農砲")) { // XBow和加農砲可能水平發射
+          let dirToTarget = p5.Vector.sub(target.pos, this.pos).normalize();
+          startOffset = dirToTarget.mult(this.size * 0.4);
+      }
+      let projectileStartX = this.pos.x + startOffset.x;
+      let projectileStartY = this.pos.y + startOffset.y;
+
+
+      const projectile = new Projectile(projectileStartX, projectileStartY, target, projectileSpeed, damageToDeal, this.isFriendly, visualOptions, this.cardData);
+      match.gameObjects.push(projectile);
+      // playSound('tower_shot'); // 塔攻擊音效
+
+      this.attackCooldown = 1 / this.attackSpeed;
+    }
+  }
+
+  takeDamage(amount) {
+    this.hp -= amount;
+    if (this.hp <= 0) {
+      this.hp = 0; // Ensure HP doesn't go negative for display
+      // Destruction handled in update for effects
+    }
+  }
+
+  draw() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    
+    fill(this.color);
+    if (this.isTower) {
+        if (this.isKing) {
+            quad(-this.size/3, this.size/2, this.size/3, this.size/2, this.size/2, -this.size/2, -this.size/2, -this.size/2); // Trapezoid shape for King
+        } else {
+            rect(0,0, this.size*0.7, this.size); // Princess towers taller
+        }
+    } else {
+         rect(0, 0, this.size, this.size * 0.8); // Non-tower buildings
+    }
+
+    // 血條
+    const hpBarWidth = this.size * 0.8;
+    const hpBarHeight = 8;
+    const hpBarYOffset = this.isTower ? -this.size/2 - 15 : -this.size*0.4 -10;
+    fill(50);
+    rect(0, hpBarYOffset, hpBarWidth, hpBarHeight);
+    fill(0, 255, 0);
+    rect(-(hpBarWidth - (hpBarWidth * (this.hp / this.maxHp)))/2, hpBarYOffset, hpBarWidth * (this.hp / this.maxHp), hpBarHeight);
+    
+        if (this.attackRange > 0 && this.hp > 0) {
+      push();
+      noFill();
+      stroke(255, 255, 0, 70); // 黃色半透明
+      strokeWeight(1);
+      // drawDashedEllipse 的 x,y 是相對於 translate(this.pos.x, this.pos.y) 後的 (0,0)
+      // attackRange 是半徑
+      drawDashedEllipse(0, 0, this.attackRange, this.attackRange, 24, 0.5);
+      pop();
+    }
+
+    
+    // Debug: show HP
+    // fill(255); textSize(12); textAlign(CENTER,CENTER); text(Math.ceil(this.hp), 0, hpBarYOffset - 10);
+
+    pop();
+  }
+}
+// Factory function for towers, because `BuildingUnit` was used in Player class before Building class defined.
+// This acts like a static method of Building, but defined after to resolve order issues.
+BuildingUnit = Building.塔樓;
+
+
+// --- 法術 (Spell) ---
+class Spell extends GameObject {
+  constructor(x, y, isFriendly, cardData, spellDmg, spellRange, spellSplashRadius) {
+    super(x, y, isFriendly, cardData); // Pass cardData
+    this.dmg = spellDmg; // cardData.dmg might be 0 if it's a spawner spell
+    this.radius = spellRange; // For targeting or effect area (cardData.attackRange)
+    this.splashRadius = spellSplashRadius || this.radius; // Actual damage area (cardData.splashRadius)
+    
+    this.duration = 0.5; // Spells are mostly instant, this is for visual effect
+    this.applied = false;
+    
+    // Spell specific properties
+    if (this.cardData.special === "linear_pushback" && this.cardData.name === "滾木 The Log") {
+        this.logSpeed = TILE_SIZE * 8; // Log rolls fast
+        this.logWidth = TILE_SIZE * 0.8; // Log visual width
+        this.logTravelDistance = this.radius; // attackRange is used as travel distance for log
+        this.distanceTraveled = 0;
+        this.direction = this.isFriendly ? createVector(0, -1) : createVector(0, 1); // Player log rolls up, AI log rolls down
+        this.pos.y += this.isFriendly ? this.logTravelDistance/2 : -this.logTravelDistance/2; // Start behind target point and roll through
+        this.duration = this.logTravelDistance / this.logSpeed; // Duration based on travel
+        this.hitUnits = new Set(); // Track units hit by this log instance
+    }
+    if (this.cardData.special === "area_spawn_over_time" && this.cardData.name === "墓園 Graveyard") {
+        this.spawnInterval = 0.5; // seconds
+        this.skeletonsToSpawn = 10; // Example: Graveyard spawns 10 skeletons over its duration
+        this.duration = this.spawnInterval * this.skeletonsToSpawn;
+        this.spawnTimer = 0;
+    }
+    if (this.cardData.special === "freeze" && this.cardData.name === "冰凍 Freeze") {
+        this.freezeDuration = 4.0; // seconds
+        this.duration = this.freezeDuration + 0.5; // Visual effect + freeze time
+    }
+  }
+
+  update(dt, match) {
+    this.duration -= dt;
+
+    if (!this.applied && this.cardData.special !== "linear_pushback" && this.cardData.special !== "area_spawn_over_time") { // Apply non-DOT/traveling spells once
+        this.applyEffect(match);
+        this.applied = true;
+    }
+    
+    // Specific spell updates
+    if (this.cardData.special === "linear_pushback" && this.cardData.name === "滾木 The Log") {
+        const moveAmount = this.logSpeed * dt;
+        this.pos.add(this.direction.copy().mult(moveAmount));
+        this.distanceTraveled += moveAmount;
+        this.applyLogEffect(match); // Apply effect continuously as it travels
+        if (this.distanceTraveled >= this.logTravelDistance) this.duration = 0; // Log finished
+    }
+    if (this.cardData.special === "area_spawn_over_time" && this.cardData.name === "墓園 Graveyard") {
+        this.spawnTimer -= dt;
+        if (this.spawnTimer <=0 && this.skeletonsToSpawn > 0) {
+            this.spawnGraveyardSkeleton(match);
+            this.skeletonsToSpawn--;
+            this.spawnTimer = this.spawnInterval;
+        }
+    }
+    
+    if (this.duration <= 0) {
+        this.isDestroyed = true; // Will be removed by match update
+    }
+  }
+  
+  applyLogEffect(match) {
+      // Log hits units in a rectangular area as it moves
+      const logRect = {
+          x: this.pos.x - this.splashRadius / 2, // splashRadius used as Log's width
+          y: this.pos.y - this.logWidth / 2,
+          w: this.splashRadius,
+          h: this.logWidth,
+      };
+
+      const opponentPlayerIndex = this.isFriendly ? 1 : 0;
+      const targets = [...match.gameObjects, ...match.players[opponentPlayerIndex].towers];
+
+      targets.forEach(obj => {
+          if (obj.isFriendly !== this.isFriendly && obj.hp > 0 && obj.movementType === "ground" && !this.hitUnits.has(obj.id)) {
+              // Check collision with log's current position (simplified rect check)
+              if (obj.pos.x > logRect.x && obj.pos.x < logRect.x + logRect.w &&
+                  obj.pos.y > logRect.y && obj.pos.y < logRect.y + logRect.h) {
+                  obj.takeDamage(this.dmg);
+                  this.hitUnits.add(obj.id);
+                  // Pushback effect (simplified: small stun or brief target reset)
+                  if(obj.attackCooldown !== undefined) obj.attackCooldown = Math.max(obj.attackCooldown, 0.2);
+                  if(obj.target) obj.target = null; // Force retarget
+              }
+          }
+      });
+  }
+
+  spawnGraveyardSkeleton(match) {
+    const casterPlayer = match.players[this.isFriendly ? 0 : 1];
+    const randomOffset = p5.Vector.random2D().mult(random(this.radius * 0.8));
+    const spawnPos = p5.Vector.add(this.pos, randomOffset);
+    
+    const skeletonProps = UNIT_TEMPLATES.skeleton_basic; // Uses predefined skeleton
+    const newSkeleton = new Unit(spawnPos.x, spawnPos.y, this.isFriendly, skeletonProps, this.cardData); // Pass Graveyard cardData for context
+    match.gameObjects.push(newSkeleton);
+    match.spawnParticleEffect(spawnPos, 5, [150,255,150], 'spawn');
+  }
+
+
+  applyEffect(match) {
+    // Common targeting logic
+    const opponentPlayerIndex = this.isFriendly ? 1 : 0;
+    let targets = [...match.gameObjects, ...match.players[opponentPlayerIndex].towers];
+    
+    if (this.cardData.special === "multi_target_3" && this.cardData.name === "雷擊 Lightning") {
+        let validTargets = targets.filter(obj => 
+            obj.isFriendly !== this.isFriendly && obj.hp > 0 &&
+            p5.Vector.dist(this.pos, obj.pos) <= this.radius &&
+            (this.cardData.targetType === "any" || this.cardData.targetType === obj.movementType || (this.cardData.targetType === "buildings" && obj.isTower))
+        );
+        validTargets.sort((a,b) => b.hp - a.hp); // Prioritize higher HP targets
+        for(let i=0; i < Math.min(3, validTargets.length); i++) {
+            validTargets[i].takeDamage(this.dmg);
+            match.spawnParticleEffect(validTargets[i].pos, 15, [255,255,0], 'lightning_bolt', this.pos);
+        }
+    } else { // Standard Area of Effect
+        targets.forEach(obj => {
+            if (obj.isFriendly !== this.isFriendly && obj.hp > 0 &&
+                p5.Vector.dist(this.pos, obj.pos) <= this.splashRadius &&
+                (this.cardData.targetType === "any" || this.cardData.targetType === obj.movementType || (this.cardData.targetType === "buildings" && obj.isTower) || (obj.isTower && this.cardData.targetType !== "airOnlyExample"))) { // Basic type check
+                
+                obj.takeDamage(this.dmg);
+                if (this.cardData.special === "freeze") {
+                    if (obj.attackCooldown !== undefined) obj.attackCooldown = Math.max(obj.attackCooldown, this.freezeDuration);
+                    if (obj.speed !== undefined) { // Freeze movement
+                        obj.originalSpeedFrozen = obj.originalSpeedFrozen !== undefined ? obj.originalSpeedFrozen : obj.speed;
+                        obj.speed = 0;
+                        setTimeout(() => { // Unfreeze after duration
+                            if(obj.originalSpeedFrozen !== undefined) obj.speed = obj.originalSpeedFrozen;
+                            obj.originalSpeedFrozen = undefined;
+                        }, this.freezeDuration * 1000);
+                    }
+                }
+            }
+        });
+    }
+  }
+
+  draw() { // Visual effect for the spell
+    push();
+    translate(this.pos.x, this.pos.y);
+    let spellColor = color(COLOR_SPELL_EFFECT);
+    spellColor.setAlpha(map(this.duration, 0.5, 0, 150, 0)); // Fade out
+
+    if (this.cardData.special === "linear_pushback" && this.cardData.name === "滾木 The Log") {
+        fill(139,69,19, spellColor.levels[3]); // Brown color for log
+        rect(0, 0, this.splashRadius, this.logWidth, this.logWidth/2); // Log is wide (splashRadius) and short (logWidth)
+    } else if (this.cardData.special === "area_spawn_over_time" && this.cardData.name === "墓園 Graveyard") {
+        strokeWeight(3);
+        stroke(50,200,50, spellColor.levels[3]);
+        noFill();
+        ellipse(0,0, this.radius * 2, this.radius * 2);
+        fill(50,200,50, spellColor.levels[3] / 3);
+        ellipse(0,0, this.radius * 2, this.radius * 2);
+    } else if (this.cardData.special === "freeze" && this.cardData.name === "冰凍 Freeze") {
+        fill(100,150,255, spellColor.levels[3] / 2);
+        stroke(200,220,255, spellColor.levels[3]);
+        strokeWeight(4);
+        ellipse(0,0, this.splashRadius * 2, this.splashRadius * 2);
+    } else { // Default circular explosion for Fireball, Arrows etc.
+        fill(spellColor);
+        noStroke();
+        ellipse(0, 0, this.splashRadius * 2, this.splashRadius * 2);
+    }
+    pop();
+  }
 }
 
-// Helper function to check if mouse is over a UI panel rectangle
-function isMouseOverPanel(panel) {
-    if (!panel) return false;
-    return mouseX > panel.x && mouseX < panel.x + panel.w &&
-           mouseY > panel.y && mouseY < panel.y + panel.h;
+// --- 粒子效果 ---
+class Particle {
+  constructor(x, y, pColor, type = 'explosion', targetPos = null) {
+    this.pos = createVector(x, y);
+    if (type === 'explosion' || type === 'death' || type === 'spawn') {
+        this.vel = p5.Vector.random2D().mult(random(1, 5));
+    } else if (type === 'hit' || type === 'hit_splash') {
+        this.vel = p5.Vector.random2D().mult(random(0.5, 2));
+    } else if (type === 'line' || type === 'lightning_bolt') {
+        if (targetPos) {
+            this.vel = p5.Vector.sub(targetPos, this.pos).normalize().mult(random(10,20)); // Fast for line
+        } else {
+            this.vel = createVector(0,0); // Static if no target
+        }
+    } else {
+        this.vel = createVector(random(-1,1), random(-1,1));
+    }
+    
+    this.lifespan = type === 'line' || type === 'lightning_bolt' ? 30 : random(30, 60); // frames
+    this.pColor = pColor;
+    this.size = random(3, 8);
+    this.type = type;
+  }
+
+  update(dt) { // dt not used here, lifespan is frame-based for simplicity
+    this.pos.add(this.vel);
+    this.lifespan--;
+    if (this.type === 'explosion' || this.type === 'death') {
+        this.vel.mult(0.95); // Slow down explosion particles
+    }
+  }
+
+  isFinished() {
+    return this.lifespan <= 0;
+  }
+
+  draw() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    let particleColor = color(this.pColor);
+    particleColor.setAlpha(map(this.lifespan, 0, 60, 0, 255));
+    fill(particleColor);
+    noStroke();
+    if (this.type === 'line' || this.type === 'lightning_bolt') {
+        ellipse(0, 0, this.size * 1.5, this.size * 0.5); // Streaky particle
+    } else {
+        ellipse(0, 0, this.size, this.size);
+    }
+    pop();
+  }
 }
 
-// Disable browser's right-click context menu on the canvas
-function disableRightClickContextMenu(){
-    // Check if running in a browser environment
-    if (typeof document !== 'undefined') {
-         document.addEventListener('contextmenu', event => {
-             // Prevent default only if the target is the canvas or related elements
-             // For simplicity, preventing everywhere for now.
-             event.preventDefault();
-         });
+class Projectile extends GameObject {
+  constructor(startX, startY, targetObject, speed, damage, isFriendly, visualOptions = {}, shooterCardData = null) {
+    super(startX, startY, isFriendly, shooterCardData);
+    this.target = targetObject;
+    this.speed = speed * TILE_SIZE; // speed 是一個係數, 例如 8-15
+    this.damage = damage;
+    
+    this.visual = {
+      type: visualOptions.type || 'ellipse', // 'ellipse', 'rect' (for arrows)
+      size: visualOptions.size || 8,
+      color: visualOptions.color || (isFriendly ? [180,180,255] : [255,180,180]),
+      rotation: 0, // For arrows
+    };
+
+    this.pos = createVector(startX, startY);
+    this.vel = createVector(0,0);
+    this.arrived = false;
+    this.movementType = "projectile"; // 用於可能的特殊處理
+
+    // 計算初始方向和旋轉 (主要給箭矢用)
+    if (this.target) {
+        let dirToTarget = p5.Vector.sub(this.target.pos, this.pos);
+        this.visual.rotation = dirToTarget.heading(); // P5 heading gives angle in radians
+    }
+  }
+
+  update(dt, match) {
+    if (this.arrived || !this.target || this.target.hp <= 0 || this.target.isDestroyed) {
+      this.isDestroyed = true;
+      return;
+    }
+
+    let dir = p5.Vector.sub(this.target.pos, this.pos);
+    let distToTarget = dir.mag();
+
+    // 簡易碰撞檢測：當投射物非常接近目標中心時
+    // 目標的大小也應該考慮進去
+    let targetRadius = (this.target.visual ? this.target.visual.size / 2 : (this.target.size ? this.target.size / 2 : TILE_SIZE / 3));
+    if (distToTarget < targetRadius) {
+      this.arrived = true;
+      this.target.takeDamage(this.damage);
+      match.spawnParticleEffect(this.target.pos, 5, this.visual.color, 'hit'); // 在目標位置產生命中效果
+      // playSound('hit'); // 可以在 Match 中統一處理 Projectile 命中音效
+      this.isDestroyed = true;
+    } else {
+      this.vel = dir.normalize().mult(this.speed * dt);
+      this.pos.add(this.vel);
+      // 更新箭矢方向 (如果目標移動)
+      if (this.visual.type === 'rect') {
+         this.visual.rotation = this.vel.heading();
+      }
+    }
+  }
+
+  draw() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this.visual.rotation); // Apply rotation
+    fill(this.visual.color);
+    noStroke();
+
+    if (this.visual.type === 'ellipse') {
+      ellipse(0, 0, this.visual.size, this.visual.size);
+    } else if (this.visual.type === 'rect') { // For arrows
+      rect(0, 0, this.visual.size, this.visual.size / 3); // 箭的長度和寬度
+    }
+    pop();
+  }
+
+  takeDamage(amount) { /* 通常投射物不受傷 */ }
+}
+
+
+function drawDashedEllipse(centerX, centerY, radiusW, radiusH, segments = 20, dashLenRatio = 0.6) {
+  // centerX, centerY 是 ellipse 模式為 CENTER 時的圓心
+  // radiusW, radiusH 是半徑 (不是直徑)
+  push();
+  // noFill(); // 由調用者決定是否填充
+  // stroke(...); // 由調用者設定顏色和粗細
+  // strokeWeight(...);
+
+  let angleStep = TWO_PI / segments;
+  for (let i = 0; i < segments; i++) {
+    let angle1 = i * angleStep;
+    let angle2 = angle1 + angleStep * dashLenRatio;
+
+    // 根據 p5.js ellipse() 的參數，它是用直徑，所以這裡 radiusW, radiusH 是半徑
+    // 但我們的函數接收的是半徑，所以直接用
+    let x1 = centerX + radiusW * cos(angle1);
+    let y1 = centerY + radiusH * sin(angle1);
+    let x2 = centerX + radiusW * cos(angle2);
+    let y2 = centerY + radiusH * sin(angle2);
+
+    line(x1, y1, x2, y2);
+  }
+  pop();
+}
+
+
+// --- 勝負後統計畫面 ---
+function renderPostGameScreen() {
+  fill(0, 0, 0, 150); // 半透明背景
+  rect(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+  textAlign(CENTER, CENTER);
+  textSize(64);
+  if (currentMatch && currentMatch.winner === "TIE") {
+    fill(200, 200, 0);
+    text("平手!", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+  } else if (currentMatch && currentMatch.players[currentMatch.winner].isHuman) {
+    fill(0, 255, 0);
+    text("勝利!", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+  } else if (currentMatch) {
+    fill(255, 0, 0);
+    text("失敗", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+  } else {
+    fill(255); text("遊戲結束", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3); // Fallback
+  }
+
+  if (currentMatch && currentMatch.gameOverMessage) {
+    textSize(24);
+    fill(220);
+    text(currentMatch.gameOverMessage, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3 + 70);
+  }
+  
+  textSize(20);
+  fill(200);
+  if (currentMatch) {
+      const playerStats = currentMatch.players[0];
+      const aiStats = currentMatch.players[1];
+      let playerTowerHp = playerStats.towers.reduce((sum,t) => sum + Math.max(0, t.hp),0);
+      let aiTowerHp = aiStats.towers.reduce((sum,t) => sum + Math.max(0, t.hp),0);
+
+      text(`我方剩餘塔血: ${playerTowerHp}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 20);
+      text(`敵方剩餘塔血: ${aiTowerHp}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
+      text(`我方出牌次數: ${currentMatch.cardsPlayedCount[0]}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 80);
+      text(`敵方出牌次數: ${currentMatch.cardsPlayedCount[1]}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 110);
+  }
+
+  textSize(28);
+  fill(255);
+  text("按任意鍵或點擊返回主選單", CANVAS_WIDTH / 2, CANVAS_HEIGHT * 2 / 3 + 50);
+}
+
+// --- Helper 函式 ---
+function getRarityColor(rarity, alpha = 255) {
+  switch (rarity) {
+    case "common": return color(200, 200, 200, alpha);
+    case "rare": return color(255, 165, 0, alpha); //橘色
+    case "epic": return color(180, 0, 255, alpha);   //紫色
+    case "legendary": return color(0, 255, 255, alpha); //青色 (彩虹色難做，用亮色代替)
+    default: return color(150, 150, 150, alpha);
+  }
+}
+
+function generateAIRandomDeck() {
+    let aiDeck = [];
+    let availableCards = [...CARD_POOL];
+    // AI should not use Mirror as it's complex for current AI logic
+    availableCards = availableCards.filter(c => c.special !== "mirror_last_card");
+
+    while(aiDeck.length < 8 && availableCards.length > 0) {
+        let randomIndex = Math.floor(Math.random() * availableCards.length);
+        aiDeck.push(availableCards.splice(randomIndex, 1)[0]);
+    }
+    return aiDeck;
+}
+
+// --- 音效輔助函式 ---
+function createSineOscillator(freq, ampVal, attackTime, releaseTime, type = 'sine') {
+  if (!soundEnabled || typeof p5.Oscillator === 'undefined') return null;
+  let osc = new p5.Oscillator(type);
+  osc.freq(freq);
+  osc.amp(0); // Start silent
+  // Return an object that can play the sound
+  return {
+    play: () => {
+      if (!soundEnabled) return;
+      osc.start();
+      osc.amp(ampVal, attackTime);
+      // Schedule stop
+      setTimeout(() => { // This is a simplified way, p5.env attack/release is better
+          osc.amp(0, releaseTime);
+          // p5.Oscillator doesn't auto-stop after amp goes to 0 with this method.
+          // A more robust approach would use an Envelope.
+          // For now, we'll just let it run at 0 amp or stop it after a delay.
+          setTimeout(() => osc.stop(), (releaseTime + 0.1) * 1000); 
+      }, (attackTime + 0.05) * 1000); // Hold for a very short time
+    }
+  };
+}
+
+function createFanfareOscillator(ampVal) {
+    if (!soundEnabled || typeof p5.Oscillator === 'undefined') return null;
+    // A sequence of notes for fanfare
+    const notes = [
+        { freq: 523.25, duration: 0.2 }, // C5
+        { freq: 659.25, duration: 0.2 }, // E5
+        { freq: 783.99, duration: 0.4 }, // G5
+    ];
+    let oscs = notes.map(note => {
+        let o = new p5.Oscillator('triangle');
+        o.freq(note.freq);
+        o.amp(0);
+        return {osc: o, duration: note.duration};
+    });
+    
+    return {
+        play: () => {
+            if (!soundEnabled) return;
+            let cumulativeDelay = 0;
+            oscs.forEach(item => {
+                setTimeout(() => {
+                    item.osc.start();
+                    item.osc.amp(ampVal, 0.01);
+                    setTimeout(() => {
+                        item.osc.amp(0, 0.1);
+                        setTimeout(() => item.osc.stop(), 150);
+                    }, item.duration * 1000 - 100);
+                }, cumulativeDelay * 1000);
+                cumulativeDelay += item.duration;
+            });
+        }
+    };
+}
+
+function playSound(soundName) {
+  if (soundEnabled && sounds[soundName] && sounds[soundName].play) {
+    sounds[soundName].play();
+  }
+}
+
+// --- 本地儲存 ---
+function saveLastUsedDeck(deckNames) {
+    if (typeof(Storage) !== "undefined") {
+        localStorage.setItem("clashP5_lastDeck", JSON.stringify(deckNames));
     }
 }
+
+function loadLastUsedDeck() {
+    if (typeof(Storage) !== "undefined") {
+        const savedDeck = localStorage.getItem("clashP5_lastDeck");
+        if (savedDeck) {
+            lastUsedDeck = JSON.parse(savedDeck);
+        } else {
+            lastUsedDeck = [];
+        }
+    }
+}
+
+
+// --- JSON 匯出介面示例 ---
+/*
+async function loadCardDataFromJSON(filePath = 'cards.json') {
+  try {
+    const response = await fetch(filePath);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const externalCardPool = await response.json();
+    // CARD_POOL = externalCardPool; // 在實際應用中，會用這個數據替換內建的 CARD_POOL
+    console.log("Card data loaded from JSON:", externalCardPool);
+    return externalCardPool;
+  } catch (error) {
+    console.error("Could not load card data from JSON:", error);
+    return null; // 或返回預設的 CARD_POOL
+  }
+}
+
+// 使用示例 (例如在 setup 中):
+// async function setup() {
+//   ...
+//   const externalCards = await loadCardDataFromJSON();
+//   if (externalCards) {
+//      // CARD_POOL = externalCards; // 如果要覆蓋
+//      // deckBuilder = new DeckBuilder(externalCards);
+//   } else {
+//      // deckBuilder = new DeckBuilder(CARD_POOL); // 使用內建
+//   }
+//   ...
+// }
+
+// cards.json 檔案內容示例:
+// [
+//   {
+//     "id": 1,
+//     "name": "Giant",
+//     "type": "troop",
+//     "elixir": 5,
+//     // ... 其他欄位 ...
+//     "description": "外部載入的巨人敘述"
+//   },
+//   // ... 更多卡牌 ...
+// ]
+*/

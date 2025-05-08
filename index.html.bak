@@ -1,72 +1,80 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽鬼牌</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-    <style>
-        /* 讓整個畫面置中 */
-        body {
-            display: flex;
-            flex-direction: column; /* 讓內容垂直排列 */
-            justify-content: center;
-            align-items: center;
-            height: 100vh; /* 讓頁面填滿整個視窗高度 */
-            margin: 0;
-            background-color: #ffffff; /* 設定背景顏色 */
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>clashroyale_mini</title>
+  <!-- 載入 p5.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    /* 將頁面及畫布容器都置中，並隱藏滾動條 */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #ffffff;
+      flex-direction: column;
+    }
 
-        /* 確保 p5.js 畫布置中 */
-        #game-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
+    /* 畫布容器，寬度拉滿，但不超過原始畫布寬度 */
+    #game-container {
+      width: 100%;
+      max-width: 800px;   /* 將 800px 換成你的 sketch.js 中 createCanvas 的寬度 */
+      flex-shrink: 0;
+    }
 
-        /* 讓圖片與文字置中 */
-        .steam-game {
-            text-align: center;
-            margin-top: 20px; /* 讓遊戲區域與 Steam 圖片有點間距 */
-        }
+    /* 針對 p5.js 自動產生的 canvas 做等比縮放 */
+    #game-container canvas {
+      width: 100% !important;
+      height: auto !important;
+      display: block;
+    }
 
-        /* 美化圖片 */
-        .steam-game img {
-            width: 300px; /* 圖片大小 */
-            border-radius: 10px; /* 圓角 */
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* 陰影效果 */
-        }
-
-        /* 讓文字更明顯 */
-        .steam-game a {
-            display: block;
-            margin-top: 10px;
-            font-size: 18px;
-            font-weight: bold;
-            text-decoration: none;
-            color: #0078D4;
-        }
-
-        /* 滑鼠移過去改變顏色 */
-        .steam-game a:hover {
-            color: #0056a3;
-        }
-    </style>
+    /* 以下為你的 Steam 遊戲推廣區塊樣式 */
+    .steam-game {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .steam-game img {
+      width: 300px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    .steam-game a {
+      display: block;
+      margin-top: 10px;
+      font-size: 18px;
+      font-weight: bold;
+      text-decoration: none;
+      color: #0078D4;
+    }
+    .steam-game a:hover {
+      color: #0056a3;
+    }
+  </style>
 </head>
 <body>
-    <!-- 遊戲畫面 -->
-    <div id="game-container">
-        <script src="sketch.js"></script> <!-- 你的遊戲程式碼 -->
-    </div>
 
-    <!-- 團隊其他 Steam 遊戲 -->
-    <div class="steam-game">
-        <a href="https://store.steampowered.com/app/2325390?utm_source=github" target="_blank">
-            <img src="steam_game.jpg" alt="AirBoost: Airship Knight">
-        </a>
-        <a href="https://store.steampowered.com/app/2325390?utm_source=github" target="_blank">
-            other Steam game!
-        </a>
-    </div>
+  <!-- 遊戲畫布容器 -->
+  <div id="game-container"></div>
+
+  <!-- 載入你的 p5.js 程式 -->
+  <script src="sketch.js"></script>
+
+  <!-- 團隊其他 Steam 遊戲 -->
+  <div class="steam-game">
+    <a href="https://store.steampowered.com/app/2325390?utm_source=github" target="_blank">
+      <img src="steam_game.jpg" alt="AirBoost: Airship Knight">
+    </a>
+    <a href="https://store.steampowered.com/app/2325390?utm_source=github" target="_blank">
+      作者在開發的 Steam game!
+    </a>
+  </div>
+
 </body>
 </html>
