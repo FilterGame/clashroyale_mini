@@ -43,6 +43,8 @@ const COLOR_SPELL_EFFECT = [200, 50, 200, 150]; // RGBA
 
 const PARTICLE_LIMIT = 200; // 最大粒子數量
 
+
+
 // --- 資料結構 ---
 
 // 卡牌資料庫
@@ -111,6 +113,8 @@ let playerDeck = []; // 玩家選擇的牌組 (CardData objects)
 let lastUsedDeck = []; // 用於 localStorage
 
 let simpleFont; // 字體
+let hoveredCardDetails = null;
+
 
 // 音效相關
 let sounds = {};
@@ -120,6 +124,17 @@ let soundEnabled = true; // 簡易音量控制（開/關）
 function preload() {
   // 若有外部資源（如字體），在此載入
   // simpleFont = loadFont('assets/your_font.ttf'); // 範例，本專案不使用外部字體
+}
+
+function mouseMoved() {
+  hoveredCardDetails = null; // 每次滑鼠移動時先重置
+
+  if (gameState === "DECK_BUILDER" && deckBuilder) {
+    deckBuilder.handleMouseMoved(mouseX, mouseY); // 請 DeckBuilder 處理懸停
+  } else if (gameState === "BATTLE" && currentMatch && currentMatch.players[0]) {
+    // 假設玩家0是人類玩家
+    currentMatch.players[0].handleHandHover(mouseX, mouseY); // 請玩家物件處理手牌懸停
+  }
 }
 
 function setup() {
@@ -171,6 +186,12 @@ function draw() {
       break;
   }
 
+    // <<< 新增：如果 hoveredCardDetails 不是 null，就繪製卡片資訊框 >>>
+  if (hoveredCardDetails) {
+    drawCardInfoBox(hoveredCardDetails);
+  }
+
+  
   // 顯示 FPS
   fill(255);
   textSize(16);
@@ -287,6 +308,55 @@ class DeckBuilder {
     this.confirmButton = { x: CANVAS_WIDTH - 150, y: CANVAS_HEIGHT - 80, w: 200, h: 60, text: "確認牌組" };
   }
 
+    handleMouseMoved(mx, my) {
+    // 檢查卡牌池列表的懸停
+    const itemHeight = this.cardDisplayHeight;
+    const itemPadding = 5;
+    const listStartY = this.listY;
+
+    for (let i = 0; i < this.cardPool.length; i++) {
+      let card = this.cardPool[i];
+      // 計算卡牌在列表中的實際繪製區域 (左上角x, 左上角y, 寬, 高)
+      // 假設卡牌在列表中是居中顯示的
+      let cardRectX = this.listX + (this.listWidth - this.cardDisplayWidth) / 2;
+      let cardRectY = listStartY + i * (itemHeight + itemPadding) - this.scrollOffset;
+
+      // 檢查滑鼠是否在該卡牌的區域內，並且該卡牌部分是可見的
+      if (mx >= cardRectX && mx <= cardRectX + this.cardDisplayWidth &&
+          my >= cardRectY && my <= cardRectY + itemHeight) {
+        if (cardRectY + itemHeight >= listStartY && cardRectY <= listStartY + this.listHeight) { // 確保在可視範圍內
+            hoveredCardDetails = card;
+            return; // 找到一個懸停，就不再檢查其他
+        }
+      }
+    }
+
+    // 檢查已選牌組的懸停
+    const slotSize = this.deckSlotSize;
+    const deckPadding = 10;
+    const cardsPerRow = 4;
+    // 計算已選牌組區域第一個卡槽的左上角 X 座標
+    const startXDeckContainer = this.deckX + (this.deckWidth - (cardsPerRow * slotSize + (cardsPerRow - 1) * deckPadding)) / 2;
+    let currentYDeck = this.deckY; // 已選牌組區域的起始 Y 座標
+
+    for (let i = 0; i < 8; i++) { // 檢查所有8個卡槽
+      const row = Math.floor(i / cardsPerRow);
+      const col = i % cardsPerRow;
+      // 計算當前卡槽的左上角 x, y
+      const slotRectX = startXDeckContainer + col * (slotSize + deckPadding);
+      const slotRectY = currentYDeck + row * (slotSize + deckPadding);
+
+      if (this.selectedDeck[i]) { // 只有當卡槽裡有卡片時才檢查
+        if (mx >= slotRectX && mx <= slotRectX + slotSize &&
+            my >= slotRectY && my <= slotRectY + slotSize) {
+          hoveredCardDetails = this.selectedDeck[i];
+          return; // 找到一個懸停
+        }
+      }
+    }
+  }
+
+  
   setSelectedDeck(deck) {
     this.selectedDeck = deck.slice(0, 8);
   }
@@ -405,6 +475,10 @@ class DeckBuilder {
         const totalContentHeight = this.cardPool.length * (itemHeight + padding);
         this.scrollOffset += event.delta;
         this.scrollOffset = constrain(this.scrollOffset, 0, Math.max(0, totalContentHeight - this.listHeight));
+      
+              // <<< 新增：滾動後也檢查一次懸停 >>>
+        this.handleMouseMoved(mouseX, mouseY);
+
     }
   }
 
@@ -1190,6 +1264,39 @@ class Player {
         this.nextCard = this.deck[0];
     } else {
         this.nextCard = null;
+    }
+  }
+
+    handleHandHover(mx, my) {
+    if (!this.isHuman) return; // 只對人類玩家有效
+
+    const cardWidth = 80;
+    const cardHeight = 100;
+    const handCenterY = CANVAS_HEIGHT - 120; // 手牌的中心 Y 座標
+    const handSpacing = 10;
+    const totalHandWidth = this.hand.length * cardWidth + (this.hand.length - 1) * handSpacing;
+    // 計算第一張手牌矩形區域的左上角 X 座標
+    let startHandRectX = CANVAS_WIDTH / 2 - totalHandWidth / 2;
+
+    for (let i = 0; i < this.hand.length; i++) {
+      if (!this.hand[i]) continue; // 如果該手牌位置為空
+
+      // 當前手牌矩形區域的左上角 X 座標
+      const cardRectCurrentX = startHandRectX + i * (cardWidth + handSpacing);
+      
+      // 檢查滑鼠是否在當前手牌的矩形區域內
+      // 注意：你的 `render` 方法中手牌是用 `rectMode(CENTER)` 畫的，中心點是 `(cardCenterX, handBaseY)`
+      // 所以這裡的檢測需要對應：
+      // cardCenterX = cardRectCurrentX + cardWidth / 2;
+      // handBaseY = handCenterY;
+      // if (mx >= cardCenterX - cardWidth / 2 && mx <= cardCenterX + cardWidth / 2 &&
+      //     my >= handBaseY - cardHeight / 2 && my <= handBaseY + cardHeight / 2) {
+      // 或者，更直接地使用計算好的左上角和寬高：
+      if (mx >= cardRectCurrentX && mx <= cardRectCurrentX + cardWidth &&
+          my >= handCenterY - cardHeight / 2 && my <= handCenterY + cardHeight / 2) {
+        hoveredCardDetails = this.hand[i];
+        return; // 找到一個懸停
+      }
     }
   }
 
@@ -2183,6 +2290,104 @@ class Projectile extends GameObject {
   }
 
   takeDamage(amount) { /* 通常投射物不受傷 */ }
+}
+
+function drawCardInfoBox(card) {
+  if (!card) return; // 如果沒有卡片被懸停，則不執行
+
+  const boxX = 30;        // 資訊框左上角 X 座標
+  const boxY = 100;       // 資訊框左上角 Y 座標
+  const boxW = 280;       // 資訊框寬度
+  let boxH = 120;       // 資訊框初始高度，會根據內容自動調整
+  const lineH = 18;       // 每行文字的高度
+  const padding = 10;     // 內部邊距
+
+  let infoLines = []; // 用來儲存要顯示的每一行資訊
+
+  // 收集卡片資訊
+  infoLines.push(`名稱: ${card.name}`);
+  infoLines.push(`聖水: ${card.elixir === "+1" ? "複製上一張+1費" : card.elixir}`); // 特殊處理鏡像聖水
+  infoLines.push(`稀有度: ${card.rarity}`);
+  infoLines.push(`類型: ${card.type}`);
+  
+  if (card.hp > 0) infoLines.push(`生命值: ${card.hp}`);
+  if (card.dmg > 0) infoLines.push(`傷害: ${card.dmg}`);
+  if (card.speed && card.speed !== "n/a") infoLines.push(`速度: ${card.speed}`);
+  
+  // 攻擊範圍轉換為 "格"
+  let attackRangeDisplay = card.attackRange;
+  if (typeof card.attackRange === 'number' && card.attackRange > 0 && card.type !== "spell") {
+      attackRangeDisplay = (card.attackRange / TILE_SIZE).toFixed(1) + " 格";
+  } else if (card.type === "spell" && card.attackRange > 0) {
+      attackRangeDisplay = `法術半徑: ${(card.attackRange / TILE_SIZE).toFixed(1)} 格`;
+  } else if (card.attackRange === "n/a" || card.attackRange === 0) {
+      attackRangeDisplay = "近戰/無";
+  }
+  // 鏡像卡本身沒有攻擊範圍
+  if (card.special !== "mirror_last_card") {
+      infoLines.push(`攻擊範圍: ${attackRangeDisplay}`);
+  }
+
+
+  if (card.movementType && card.movementType !== "n/a") {
+      infoLines.push(`移動類型: ${card.movementType === "ground" ? "地面" : (card.movementType === "air" ? "空中" : card.movementType)}`);
+  }
+  if (card.targetType && card.targetType !== "n/a") {
+    let targetDesc = card.targetType;
+    if (targetDesc === "any") targetDesc = "任何";
+    else if (targetDesc === "ground") targetDesc = "地面";
+    else if (targetDesc === "air") targetDesc = "空中";
+    else if (targetDesc === "buildings") targetDesc = "建築";
+    infoLines.push(`目標類型: ${targetDesc}`);
+  }
+
+  if (card.spawnCount > 0 && card.spawnUnitId && UNIT_TEMPLATES[card.spawnUnitId]) {
+      infoLines.push(`召喚數量: ${card.spawnCount} (${UNIT_TEMPLATES[card.spawnUnitId].name})`);
+  } else if (card.spawnCount > 0) {
+      infoLines.push(`召喚數量: ${card.spawnCount}`);
+  }
+
+  if (card.splashRadius > 0) {
+      infoLines.push(`濺射半徑: ${(card.splashRadius / TILE_SIZE).toFixed(1)} 格`);
+  }
+  
+  if (card.special && card.special !== "") {
+      infoLines.push(`特殊能力: ${card.special}`);
+  }
+  
+  infoLines.push(` `); // 加一個空行
+  infoLines.push(`說明:`);
+  // 卡片描述會另外處理換行
+
+  // 根據行數和描述長度估算總高度
+  // 假設描述最多佔用 3-4 行的高度
+  boxH = padding * 2 + infoLines.length * lineH + (card.description ? Math.ceil(card.description.length / (boxW / 7)) * lineH + padding : 0) ; // 7是估計每個字的寬度
+  boxH = Math.max(boxH, 120); // 最小高度
+
+  // 繪製背景框
+  push(); // 保存當前繪圖狀態
+  rectMode(CORNER); // 為了方便定位，暫時切換到 CORNER 模式
+  fill(30, 30, 40, 220); // 深色半透明背景
+  stroke(150, 150, 180);    // 邊框顏色
+  strokeWeight(1);
+  rect(boxX, boxY, boxW, boxH, 8); // 圓角矩形
+  noStroke();
+
+  // 繪製文字
+  fill(230, 230, 240); // 文字顏色
+  textSize(14);
+  textAlign(LEFT, TOP); // 文字左上對齊
+  let currentTextY = boxY + padding;
+  for (const line of infoLines) {
+    text(line, boxX + padding, currentTextY);
+    currentTextY += lineH;
+  }
+  
+  // 繪製描述 (帶換行)
+  if (card.description) {
+    text(card.description, boxX + padding, currentTextY, boxW - padding * 2); // p5 text函數會自動處理maxWidth內的換行
+  }
+  pop(); // 恢復之前的繪圖狀態 (包括 rectMode)
 }
 
 
