@@ -235,7 +235,7 @@ function renderMainMenu() {
   fill(200);
   textSize(64);
   textAlign(CENTER, CENTER);
-  text("卡牌對戰遊戲", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+  text("卡牌對戰遊戲(皇室戰爭玩法)", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
 
   // 開始按鈕
   let btnX = CANVAS_WIDTH / 2;
